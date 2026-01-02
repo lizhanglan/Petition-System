@@ -54,6 +54,7 @@ class DocumentResponse(BaseModel):
     status: str
     classification: Optional[str] = "public"  # 新增：密级
     ai_annotations: Optional[dict]
+    preview_url: Optional[str] = None  # 新增：预览URL
     created_at: datetime
 
 class DocumentUpdateRequest(BaseModel):
@@ -441,6 +442,34 @@ async def generate_document(
     
     print(f"[Generate] Document created with ID: {document.id}, version 1 created")
     
+    # 生成预览URL（使用华为云Office预览服务）
+    from app.core.minio_client import minio_client
+    from app.services.office_preview_service import office_preview_service
+    
+    # 先将文档内容保存为临时文件到MinIO
+    temp_filename = f"temp_preview/{current_user.id}/{document.id}.docx"
+    
+    # 使用document_export_service生成DOCX文件
+    from app.services.document_export_service import document_export_service
+    docx_bytes = await document_export_service.export_to_docx(
+        content=final_content,
+        title=document.title,
+        options={"document_type": document.document_type}
+    )
+    
+    # 上传到MinIO
+    await minio_client.upload_file(
+        temp_filename,
+        docx_bytes,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    
+    # 获取预览URL
+    file_url = minio_client.get_file_url(temp_filename, expires=3600, inline=True)
+    preview_url = await office_preview_service.get_preview_url(file_url)
+    
+    print(f"[Generate] Preview URL generated: {preview_url}")
+    
     return DocumentResponse(
         id=document.id,
         title=document.title,
@@ -448,6 +477,7 @@ async def generate_document(
         document_type=document.document_type,
         status=document.status,
         ai_annotations=document.ai_annotations,
+        preview_url=preview_url,
         created_at=document.created_at
     )
 

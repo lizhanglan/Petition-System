@@ -82,29 +82,76 @@
           :closable="false"
           style="margin-bottom: 20px"
         >
-          请选择一个已上传的文件作为模板来源，系统将自动分析文件结构并提取模板
+          请选择文件来源：从已上传的文件中选择，或从本地上传新文件
         </el-alert>
-        
-        <el-table 
-          :data="fileList" 
-          v-loading="fileLoading"
-          @row-click="handleSelectFile"
-          highlight-current-row
-          style="cursor: pointer"
-        >
-          <el-table-column type="index" label="序号" width="60" />
-          <el-table-column prop="filename" label="文件名" />
-          <el-table-column prop="file_type" label="类型" width="100">
-            <template #default="{ row }">
-              <el-tag size="small">{{ row.file_type.toUpperCase() }}</el-tag>
+
+        <!-- 文件来源选择 -->
+        <el-radio-group v-model="fileSource" style="margin-bottom: 20px">
+          <el-radio-button value="uploaded">从已上传文件选择</el-radio-button>
+          <el-radio-button value="local">从本地上传</el-radio-button>
+        </el-radio-group>
+
+        <!-- 从已上传文件选择 -->
+        <div v-if="fileSource === 'uploaded'">
+          <el-table 
+            :data="fileList" 
+            v-loading="fileLoading"
+            @row-click="handleSelectFile"
+            highlight-current-row
+            style="cursor: pointer"
+          >
+            <el-table-column type="index" label="序号" width="60" />
+            <el-table-column prop="filename" label="文件名" />
+            <el-table-column prop="file_type" label="类型" width="100">
+              <template #default="{ row }">
+                <el-tag size="small">{{ row.file_type.toUpperCase() }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="created_at" label="上传时间" width="180">
+              <template #default="{ row }">
+                {{ formatDate(row.created_at) }}
+              </template>
+            </el-table-column>
+          </el-table>
+          
+          <el-empty 
+            v-if="!fileLoading && fileList.length === 0" 
+            description="暂无已上传的文件，请先上传文件或选择从本地上传"
+          />
+        </div>
+
+        <!-- 从本地上传 -->
+        <div v-if="fileSource === 'local'" style="text-align: center; padding: 40px 0">
+          <el-upload
+            ref="uploadRef"
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleFileChange"
+            :on-exceed="handleExceed"
+            accept=".pdf,.doc,.docx"
+            drag
+          >
+            <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+            <div class="el-upload__text">
+              将文件拖到此处，或<em>点击上传</em>
+            </div>
+            <template #tip>
+              <div class="el-upload__tip">
+                支持 PDF、Word 格式，文件大小不超过 10MB
+              </div>
             </template>
-          </el-table-column>
-          <el-table-column prop="created_at" label="上传时间" width="180">
-            <template #default="{ row }">
-              {{ formatDate(row.created_at) }}
-            </template>
-          </el-table-column>
-        </el-table>
+          </el-upload>
+
+          <el-button 
+            v-if="localFile" 
+            type="primary" 
+            style="margin-top: 20px"
+            @click="handleUploadAndExtract"
+            :loading="uploading"
+          >
+            上传并提取模板
+          </el-button>
+        </div>
       </div>
 
       <!-- 步骤 2: AI 提取中 -->
@@ -170,10 +217,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Upload, Loading } from '@element-plus/icons-vue'
+import { Plus, Upload, Loading, UploadFilled } from '@element-plus/icons-vue'
 import { getTemplateList, createTemplate, extractTemplate, saveExtractedTemplate } from '@/api/templates'
-import { getFileList } from '@/api/files'
+import { getFileList, uploadFile } from '@/api/files'
 import { ElMessage } from 'element-plus'
+import type { UploadInstance, UploadProps, UploadRawFile } from 'element-plus'
 
 const router = useRouter()
 const templateList = ref<any[]>([])
@@ -191,9 +239,13 @@ const form = ref({
 // 模板提取相关
 const extractDialogVisible = ref(false)
 const extractStep = ref(0) // 0: 选择文件, 1: AI 提取中, 2: 确认保存
+const fileSource = ref('uploaded') // 'uploaded' 或 'local'
 const fileList = ref<any[]>([])
 const fileLoading = ref(false)
 const selectedFile = ref<any>(null)
+const localFile = ref<File | null>(null)
+const uploadRef = ref<UploadInstance>()
+const uploading = ref(false)
 const extractedTemplate = ref<any>({
   name: '',
   document_type: '',
@@ -263,11 +315,11 @@ const handleSelectFile = async (row: any) => {
       
       // 填充提取结果
       extractedTemplate.value = {
-        name: `${row.filename} - 提取模板`,
+        name: `${row.file_name} - 提取模板`,
         document_type: templateData.document_type || '未知类型',
         structure: templateData.structure || {},
         structure_text: JSON.stringify(templateData.structure || {}, null, 2),
-        content_template: templateData.fixed_parts || '',
+        content_template: templateData.fixed_parts || templateData.content_template || '',
         fields: Array.isArray(templateData.fields) ? templateData.fields : []
       }
       
@@ -285,32 +337,81 @@ const handleSelectFile = async (row: any) => {
 
 const handleSaveExtracted = async () => {
   try {
+    // 处理fields：如果是数组，转换为对象；如果已经是对象，直接使用
+    let fieldsObj = {}
+    if (Array.isArray(extractedTemplate.value.fields)) {
+      extractedTemplate.value.fields.forEach((field: any, index: number) => {
+        const fieldId = field.id || field.name || `field_${index}`
+        fieldsObj[fieldId] = {
+          name: field.name || '',
+          type: field.type || 'text',
+          required: field.required || false,
+          default_value: field.default_value || ''
+        }
+      })
+    } else if (typeof extractedTemplate.value.fields === 'object') {
+      fieldsObj = extractedTemplate.value.fields
+    }
+    
+    // 确保structure是对象（dict）
+    let structure = extractedTemplate.value.structure
+    if (typeof structure === 'string') {
+      // 如果是字符串，尝试解析为对象，如果失败则包装为对象
+      try {
+        structure = JSON.parse(structure)
+      } catch {
+        structure = { description: structure }
+      }
+    } else if (!structure || typeof structure !== 'object') {
+      structure = {}
+    }
+    
+    // 确保content_template是字符串
+    let contentTemplate = extractedTemplate.value.content_template
+    if (typeof contentTemplate === 'object' && contentTemplate !== null) {
+      // 如果是对象，转换为JSON字符串
+      contentTemplate = JSON.stringify(contentTemplate, null, 2)
+    } else if (!contentTemplate) {
+      contentTemplate = ''
+    } else {
+      contentTemplate = String(contentTemplate)
+    }
+    
     const data = {
       name: extractedTemplate.value.name,
       document_type: extractedTemplate.value.document_type,
-      structure: extractedTemplate.value.structure,
-      content_template: extractedTemplate.value.content_template,
-      fields: extractedTemplate.value.fields.reduce((acc: any, field: any) => {
-        acc[field.id] = field
-        return acc
-      }, {})
+      structure: structure,
+      content_template: contentTemplate,
+      fields: fieldsObj
     }
+    
+    console.log('Saving template data:', JSON.stringify(data, null, 2))
     
     await saveExtractedTemplate(data)
     ElMessage.success('模板保存成功')
     extractDialogVisible.value = false
     extractStep.value = 0
     await loadTemplates()
-  } catch (error) {
-    console.error(error)
-    ElMessage.error('模板保存失败')
+  } catch (error: any) {
+    console.error('Save template error:', error)
+    console.error('Error response:', error.response?.data)
+    if (error.response?.data?.detail) {
+      console.error('Validation errors:', JSON.stringify(error.response.data.detail, null, 2))
+    }
+    const errorMsg = error.response?.data?.detail?.[0]?.msg || error.response?.data?.detail || '模板保存失败'
+    ElMessage.error(errorMsg)
   }
 }
 
 const handleCancelExtract = () => {
   extractDialogVisible.value = false
   extractStep.value = 0
+  fileSource.value = 'uploaded'
   selectedFile.value = null
+  localFile.value = null
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles()
+  }
   extractedTemplate.value = {
     name: '',
     document_type: '',
@@ -321,6 +422,69 @@ const handleCancelExtract = () => {
   }
 }
 
+// 处理本地文件选择
+const handleFileChange: UploadProps['onChange'] = (uploadFile) => {
+  localFile.value = uploadFile.raw as File
+}
+
+const handleExceed: UploadProps['onExceed'] = (files) => {
+  uploadRef.value!.clearFiles()
+  const file = files[0] as UploadRawFile
+  uploadRef.value!.handleStart(file)
+  localFile.value = file
+}
+
+// 上传并提取模板
+const handleUploadAndExtract = async () => {
+  if (!localFile.value) {
+    ElMessage.warning('请先选择文件')
+    return
+  }
+
+  uploading.value = true
+  
+  try {
+    // 1. 先上传文件
+    const uploadResult: any = await uploadFile(localFile.value)
+    
+    if (!uploadResult || !uploadResult.id) {
+      throw new Error('文件上传失败')
+    }
+
+    ElMessage.success('文件上传成功，开始提取模板...')
+    
+    // 2. 使用上传的文件ID进行模板提取
+    extractStep.value = 1
+    
+    const result: any = await extractTemplate(uploadResult.id, false)
+    
+    if (result.success) {
+      const templateData = result.template_data
+      
+      // 填充提取结果
+      extractedTemplate.value = {
+        name: `${localFile.value.name} - 提取模板`,
+        document_type: templateData.document_type || '未知类型',
+        structure: templateData.structure || {},
+        structure_text: JSON.stringify(templateData.structure || {}, null, 2),
+        content_template: templateData.fixed_parts || templateData.content_template || '',
+        fields: Array.isArray(templateData.fields) ? templateData.fields : []
+      }
+      
+      extractStep.value = 2
+      ElMessage.success('模板提取成功')
+    } else {
+      throw new Error(result.message || '提取失败')
+    }
+  } catch (error: any) {
+    console.error(error)
+    ElMessage.error(error.response?.data?.detail || error.message || '上传或提取失败')
+    extractStep.value = 0
+  } finally {
+    uploading.value = false
+  }
+}
+
 const formatDate = (date: string) => {
   return new Date(date).toLocaleString('zh-CN')
 }
@@ -328,6 +492,11 @@ const formatDate = (date: string) => {
 // 监听提取对话框打开
 const handleExtractDialogOpen = () => {
   extractStep.value = 0
+  fileSource.value = 'uploaded'
+  localFile.value = null
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles()
+  }
   loadFiles()
 }
 

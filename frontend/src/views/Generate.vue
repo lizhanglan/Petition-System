@@ -113,7 +113,7 @@
           <template #header>
             <div class="card-header">
               <span>生成预览</span>
-              <div v-if="generatedContent">
+              <div v-if="currentDocumentId">
                 <el-button type="success" @click="handleSave" size="small">保存文书</el-button>
                 <el-button type="primary" @click="handleDownload" size="small">下载</el-button>
               </div>
@@ -121,12 +121,25 @@
           </template>
           
           <div class="preview-container">
-            <div v-if="generatedContent" class="preview-content">
-              {{ generatedContent }}
+            <!-- 文档预览iframe -->
+            <div v-if="previewUrl" class="document-preview">
+              <iframe 
+                :src="previewUrl" 
+                frameborder="0" 
+                width="100%" 
+                height="100%"
+                style="border-radius: 4px;"
+              ></iframe>
             </div>
             <el-empty v-else description="暂无生成内容">
               <template #image>
                 <el-icon :size="60"><Document /></el-icon>
+              </template>
+              <template #description>
+                <p>请在左侧输入需求并生成文书</p>
+                <p style="font-size: 12px; color: #999; margin-top: 5px;">
+                  生成后将在此处显示文档预览
+                </p>
               </template>
             </el-empty>
           </div>
@@ -176,6 +189,7 @@ const selectedTemplateId = ref<number | null>(null)
 const messages = ref<any[]>([])
 const inputMessage = ref('')
 const generatedContent = ref('')
+const previewUrl = ref('')
 const generating = ref(false)
 const messagesRef = ref()
 const showFileSelector = ref(false)
@@ -268,6 +282,14 @@ const handleSend = async () => {
     generatedContent.value = result.content
     currentDocumentId.value = result.id
     
+    // 获取文档预览URL
+    if (result.preview_url) {
+      previewUrl.value = result.preview_url
+    } else if (result.id) {
+      // 如果没有返回preview_url，使用文档ID获取预览
+      previewUrl.value = `http://localhost:8000/api/v1/documents/${result.id}/preview`
+    }
+    
     // 添加 AI 回复
     messages.value.push({
       role: 'assistant',
@@ -307,6 +329,8 @@ const handleClearHistory = async () => {
     await clearConversation(sessionId.value)
     messages.value = []
     generatedContent.value = ''
+    previewUrl.value = ''
+    currentDocumentId.value = null
     fileReferences.value = []
     sessionInfo.value = { message_count: 0, file_reference_count: 0 }
     
@@ -495,10 +519,23 @@ onMounted(() => {
 
 .preview-container {
   height: calc(100vh - 240px);
-  overflow-y: auto;
-  padding: 20px;
+  overflow: hidden;
   background-color: #f5f5f5;
   border-radius: 4px;
+  position: relative;
+}
+
+.document-preview {
+  width: 100%;
+  height: 100%;
+  background-color: white;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.document-preview iframe {
+  width: 100%;
+  height: 100%;
 }
 
 .preview-content {
@@ -509,5 +546,7 @@ onMounted(() => {
   line-height: 1.8;
   font-size: 14px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  height: 100%;
+  overflow-y: auto;
 }
 </style>

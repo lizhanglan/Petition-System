@@ -158,10 +158,20 @@ async def extract_template(
         raise HTTPException(status_code=404, detail="文件不存在")
     
     try:
-        # 解析文件内容
-        print(f"[TemplateExtract] Parsing file: {file.filename}")
+        # 1. 从MinIO下载文件内容
+        print(f"[TemplateExtract] Downloading file from MinIO: {file.storage_path}")
+        from app.core.minio_client import minio_client
+        
+        file_content = await minio_client.download_file(file.storage_path)
+        if not file_content:
+            raise HTTPException(status_code=500, detail="文件下载失败")
+        
+        print(f"[TemplateExtract] File downloaded: {len(file_content)} bytes")
+        
+        # 2. 解析文件内容
+        print(f"[TemplateExtract] Parsing file: {file.file_name}")
         parsed_content = await file_parser_service.parse_file(
-            file.minio_path,
+            file_content,
             file.file_type
         )
         
@@ -194,7 +204,7 @@ async def extract_template(
         if request.auto_save:
             template = Template(
                 user_id=current_user.id,
-                name=f"{file.filename} - 提取模板",
+                name=f"{file.file_name} - 提取模板",
                 document_type=template_data.get("document_type", "未知类型"),
                 structure=template_data.get("structure", {}),
                 content_template=parsed_content["text"],
@@ -211,7 +221,7 @@ async def extract_template(
                 resource_type="template",
                 resource_id=file.id,
                 details={
-                    "file_name": file.filename,
+                    "file_name": file.file_name,
                     "document_type": template_data.get("document_type"),
                     "auto_save": True
                 }
@@ -235,7 +245,7 @@ async def extract_template(
                 resource_type="template",
                 resource_id=file.id,
                 details={
-                    "file_name": file.filename,
+                    "file_name": file.file_name,
                     "document_type": template_data.get("document_type"),
                     "auto_save": False
                 }
