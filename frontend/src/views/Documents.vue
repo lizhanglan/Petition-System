@@ -127,6 +127,65 @@
       />
     </el-dialog>
 
+    <!-- 编辑文书对话框 -->
+    <el-dialog 
+      v-model="editVisible" 
+      title="编辑文书" 
+      width="90%" 
+      top="5vh"
+      destroy-on-close
+      :close-on-click-modal="false"
+    >
+      <div v-if="editDocument" class="document-edit">
+        <!-- 文书基本信息 -->
+        <el-form :model="editDocument" label-width="100px" style="margin-bottom: 20px">
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="文书标题">
+                <el-input v-model="editDocument.title" placeholder="请输入文书标题" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="文书类型">
+                <el-input v-model="editDocument.document_type" placeholder="文书类型" readonly />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="状态">
+                <el-select v-model="editDocument.status" placeholder="请选择状态">
+                  <el-option label="草稿" value="draft" />
+                  <el-option label="已审核" value="reviewed" />
+                  <el-option label="已定稿" value="finalized" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="密级">
+                <el-select v-model="editDocument.classification" placeholder="请选择密级">
+                  <el-option label="公开" value="public" />
+                  <el-option label="内部" value="internal" />
+                  <el-option label="秘密" value="confidential" />
+                  <el-option label="机密" value="secret" />
+                  <el-option label="绝密" value="top_secret" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </el-form>
+
+        <!-- 富文本编辑器 -->
+        <el-divider>文书内容</el-divider>
+        <RichTextEditor v-model="editDocument.content" />
+      </div>
+      
+      <template #footer>
+        <el-button @click="handleCancelEdit">取消</el-button>
+        <el-button type="primary" @click="handleSaveEdit" :loading="saving">保存</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 密级管理对话框 -->
     <el-dialog v-model="classificationVisible" title="更新密级" width="400px">
       <el-form label-width="80px">
@@ -157,6 +216,7 @@
 import { ref, onMounted } from 'vue'
 import { getDocumentList, updateClassification } from '@/api/documents'
 import VersionManager from '@/components/VersionManager.vue'
+import RichTextEditor from '@/components/RichTextEditor.vue'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 
@@ -164,7 +224,10 @@ const documentList = ref([])
 const loading = ref(false)
 const viewVisible = ref(false)
 const versionVisible = ref(false)
+const editVisible = ref(false)
 const currentDocument = ref<any>(null)
+const editDocument = ref<any>(null)
+const saving = ref(false)
 const previewUrl = ref('')
 const previewLoading = ref(false)
 const classificationVisible = ref(false)
@@ -252,9 +315,59 @@ const handleDownload = async () => {
 }
 
 const handleEdit = (row: any) => {
-  // TODO: 实现编辑功能
-  ElMessage.info('编辑功能开发中')
-  console.log('Edit:', row)
+  // 复制文书数据用于编辑
+  editDocument.value = {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    document_type: row.document_type,
+    status: row.status,
+    classification: row.classification || 'public'
+  }
+  editVisible.value = true
+}
+
+const handleCancelEdit = () => {
+  editVisible.value = false
+  editDocument.value = null
+}
+
+const handleSaveEdit = async () => {
+  if (!editDocument.value) return
+  
+  saving.value = true
+  
+  try {
+    const response = await fetch(`/api/v1/documents/${editDocument.value.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({
+        title: editDocument.value.title,
+        content: editDocument.value.content,
+        status: editDocument.value.status,
+        classification: editDocument.value.classification,
+        change_description: '手动编辑'
+      })
+    })
+    
+    if (response.ok) {
+      ElMessage.success('文书保存成功')
+      editVisible.value = false
+      editDocument.value = null
+      await loadDocuments()
+    } else {
+      const error = await response.json()
+      throw new Error(error.detail || '保存失败')
+    }
+  } catch (error: any) {
+    console.error('Save error:', error)
+    ElMessage.error(error.message || '文书保存失败')
+  } finally {
+    saving.value = false
+  }
 }
 
 const handleVersions = (row: any) => {
@@ -402,5 +515,13 @@ onMounted(() => {
   background-color: white;
   padding: 20px;
   border-radius: 4px;
+}
+
+.document-edit {
+  padding: 10px;
+}
+
+.document-edit :deep(.rich-text-editor) {
+  margin-top: 10px;
 }
 </style>
