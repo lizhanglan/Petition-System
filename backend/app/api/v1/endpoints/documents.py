@@ -1,0 +1,636 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from typing import List, Optional
+from datetime import datetime
+from app.core.database import get_db
+from app.models.user import User
+from app.models.document import Document
+from app.models.file import File
+from app.models.audit_log import AuditLog
+from app.models.version import Version
+from app.api.v1.endpoints.auth import get_current_user
+from app.services.deepseek_service import deepseek_service
+from app.services.file_parser_service import file_parser_service
+from app.services.document_export_service import document_export_service
+from app.core.minio_client import minio_client
+from pydantic import BaseModel
+from fastapi.responses import Response
+import json
+
+router = APIRouter()
+
+class DocumentReviewRequest(BaseModel):
+    file_id: int
+
+class DocumentReviewResponse(BaseModel):
+    document_id: int
+    errors: List[dict]
+    summary: str
+
+class DocumentGenerateRequest(BaseModel):
+    template_id: int
+    prompt: str
+    context: Optional[List[dict]] = None
+
+class DocumentResponse(BaseModel):
+    id: int
+    title: str
+    content: str
+    document_type: str
+    status: str
+    ai_annotations: Optional[dict]
+    created_at: datetime
+
+class DocumentUpdateRequest(BaseModel):
+    content: Optional[str] = None
+    structured_content: Optional[dict] = None
+    title: Optional[str] = None
+    status: Optional[str] = None
+    change_description: Optional[str] = None
+
+@router.post("/review", response_model=DocumentReviewResponse)
+async def review_document(
+    request: DocumentReviewRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """AI 文档研判"""
+    # 获取文件
+    result = await db.execute(
+        select(File).where(File.id == request.file_id, File.user_id == current_user.id)
+    )
+    file = result.scalar_one_or_none()
+    
+    if not file:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    
+    print(f"[Review] Starting review for file: {file.file_name} (type: {file.file_type})")
+    
+    # 从 MinIO 读取文件内容
+    file_bytes = await minio_client.download_file(file.storage_path)
+    if not file_bytes:
+        raise HTTPException(status_code=500, detail="无法读取文件内容")
+    
+    print(f"[Review] File downloaded: {len(file_bytes)} bytes")
+    
+    # 解析文件内容
+    parsed_data = await file_parser_service.parse_file(file_bytes, file.file_type)
+    if not parsed_data:
+        raise HTTPException(status_code=500, detail="文件解析失败，请确保文件格式正确")
+    
+    file_content = parsed_data.get('text', '')
+    if not file_content.strip():
+        raise HTTPException(status_code=400, detail="文件内容为空，无法进行研判")
+    
+    print(f"[Review] File parsed: {len(file_content)} characters")
+    
+    # 调用 AI 研判
+    print(f"[Review] Calling AI service for review...")
+    review_result = await deepseek_service.review_document(file_content)
+    
+    if not review_result:
+        raise HTTPException(
+            status_code=500, 
+            detail="AI 研判服务暂时不可用，请检查 API 配置或稍后重试。可能的原因：API Key 无效、网络连接问题、服务超时。"
+        )
+    
+    print(f"[Review] AI review completed")
+    
+    # 解析 AI 返回结果
+    try:
+        review_data = json.loads(review_result)
+    except:
+        # 如果不是 JSON 格式，尝试解析为简单格式
+        review_data = {
+            "errors": [],
+            "summary": review_result
+        }
+    
+    # 确保数据结构正确
+    if not isinstance(review_data.get("errors"), list):
+        review_data["errors"] = []
+    if not review_data.get("summary"):
+        review_data["summary"] = "研判完成"
+    
+    # 创建文档记录
+    document = Document(
+        user_id=current_user.id,
+        file_id=file.id,
+        title=file.file_name,
+        content=file_content,
+        structured_content=parsed_data,
+        document_type="petition",
+        status="reviewed",
+        ai_annotations=review_data
+    )
+    db.add(document)
+    
+    # 更新文件状态
+    file.status = "reviewed"
+    
+    # 记录审计日志
+    audit_log = AuditLog(
+        user_id=current_user.id,
+        action="review",
+        resource_type="document",
+        details={
+            "file_id": file.id,
+            "file_name": file.file_name,
+            "file_type": file.file_type,
+            "content_length": len(file_content),
+            "errors_count": len(review_data.get("errors", []))
+        }
+    )
+    db.add(audit_log)
+    
+    await db.commit()
+    await db.refresh(document)
+    
+    # 创建初始版本（版本 1）
+    version = Version(
+        document_id=document.id,
+        user_id=current_user.id,
+        version_number=1,
+        content=file_content,
+        structured_content=parsed_data,
+        change_description="初始版本 - AI 研判完成",
+        is_rollback=0
+    )
+    db.add(version)
+    await db.commit()
+    
+    print(f"[Review] Review completed for document ID: {document.id}, version 1 created")
+    
+    return DocumentReviewResponse(
+        document_id=document.id,
+        errors=review_data.get("errors", []),
+        summary=review_data.get("summary", "")
+    )
+
+@router.post("/generate", response_model=DocumentResponse)
+async def generate_document(
+    request: DocumentGenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """AI 生成文书"""
+    print(f"[Generate] Starting document generation for template ID: {request.template_id}")
+    
+    # 获取模板
+    from app.models.template import Template
+    result = await db.execute(
+        select(Template).where(Template.id == request.template_id, Template.user_id == current_user.id)
+    )
+    template = result.scalar_one_or_none()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="模板不存在")
+    
+    print(f"[Generate] Template found: {template.name}")
+    
+    # 准备模板信息
+    template_info = {
+        "name": template.name,
+        "document_type": template.document_type,
+        "fields": template.fields or {},
+        "structure": template.structure or {}
+    }
+    
+    # 调用 AI 生成
+    print(f"[Generate] Calling AI with prompt length: {len(request.prompt)}")
+    generated_content = await deepseek_service.generate_document(
+        request.prompt,
+        template_info,
+        request.context
+    )
+    
+    if not generated_content:
+        raise HTTPException(status_code=500, detail="AI 生成失败，请稍后重试")
+    
+    print(f"[Generate] AI generation completed, content length: {len(generated_content)}")
+    
+    # 解析生成的内容，尝试提取结构化字段
+    structured_content = _parse_generated_content(generated_content, template.fields or {})
+    
+    # 填充模板
+    final_content = _fill_template(template.content_template, structured_content, generated_content)
+    
+    # 创建文档记录
+    document = Document(
+        user_id=current_user.id,
+        template_id=template.id,
+        title=f"{template.name}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        content=final_content,
+        structured_content=structured_content,
+        document_type=template.document_type,
+        status="draft"
+    )
+    db.add(document)
+    
+    # 记录审计日志
+    audit_log = AuditLog(
+        user_id=current_user.id,
+        action="generate",
+        resource_type="document",
+        details={
+            "template_id": template.id,
+            "template_name": template.name,
+            "prompt_length": len(request.prompt),
+            "content_length": len(final_content)
+        }
+    )
+    db.add(audit_log)
+    
+    await db.commit()
+    await db.refresh(document)
+    
+    # 创建初始版本（版本 1）
+    version = Version(
+        document_id=document.id,
+        user_id=current_user.id,
+        version_number=1,
+        content=final_content,
+        structured_content=structured_content,
+        change_description="初始版本 - AI 生成完成",
+        is_rollback=0
+    )
+    db.add(version)
+    await db.commit()
+    
+    print(f"[Generate] Document created with ID: {document.id}, version 1 created")
+    
+    return DocumentResponse(
+        id=document.id,
+        title=document.title,
+        content=document.content,
+        document_type=document.document_type,
+        status=document.status,
+        ai_annotations=document.ai_annotations,
+        created_at=document.created_at
+    )
+
+
+def _parse_generated_content(content: str, fields: dict) -> dict:
+    """
+    从生成的内容中解析结构化字段
+    
+    Args:
+        content: AI 生成的内容
+        fields: 模板字段定义
+        
+    Returns:
+        结构化字段字典
+    """
+    structured = {}
+    
+    # 简单的字段提取逻辑
+    # 实际应用中可以使用更复杂的 NLP 技术
+    for field_id, field_info in fields.items():
+        field_name = field_info.get('name', field_id)
+        
+        # 尝试在内容中查找字段值
+        # 例如：查找 "主送单位：XXX" 这样的模式
+        import re
+        pattern = f"{field_name}[：:](.*?)(?:\n|$)"
+        match = re.search(pattern, content)
+        
+        if match:
+            structured[field_id] = match.group(1).strip()
+        else:
+            # 使用默认值
+            structured[field_id] = field_info.get('default_value', '')
+    
+    return structured
+
+
+def _fill_template(template_content: str, structured_data: dict, ai_content: str) -> str:
+    """
+    填充模板内容
+    
+    Args:
+        template_content: 模板内容（可能包含占位符）
+        structured_data: 结构化数据
+        ai_content: AI 生成的内容
+        
+    Returns:
+        填充后的完整内容
+    """
+    if not template_content:
+        # 如果没有模板内容，直接返回 AI 生成的内容
+        return ai_content
+    
+    # 替换占位符
+    filled_content = template_content
+    for field_id, value in structured_data.items():
+        placeholder = f"{{{{{field_id}}}}}"  # {{field_id}} 格式
+        filled_content = filled_content.replace(placeholder, str(value))
+    
+    # 替换主体内容占位符
+    if "{{content}}" in filled_content:
+        filled_content = filled_content.replace("{{content}}", ai_content)
+    elif "{{正文}}" in filled_content:
+        filled_content = filled_content.replace("{{正文}}", ai_content)
+    else:
+        # 如果没有内容占位符，追加到末尾
+        filled_content = filled_content + "\n\n" + ai_content
+    
+    return filled_content
+
+@router.get("/list", response_model=List[DocumentResponse])
+async def list_documents(
+    skip: int = 0,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """获取文书列表"""
+    result = await db.execute(
+        select(Document)
+        .where(Document.user_id == current_user.id)
+        .order_by(Document.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    documents = result.scalars().all()
+    
+    return [
+        DocumentResponse(
+            id=doc.id,
+            title=doc.title,
+            content=doc.content,
+            document_type=doc.document_type,
+            status=doc.status,
+            ai_annotations=doc.ai_annotations,
+            created_at=doc.created_at
+        )
+        for doc in documents
+    ]
+
+@router.get("/{document_id}", response_model=DocumentResponse)
+async def get_document(
+    document_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """获取文书详情"""
+    result = await db.execute(
+        select(Document).where(Document.id == document_id, Document.user_id == current_user.id)
+    )
+    document = result.scalar_one_or_none()
+    
+    if not document:
+        raise HTTPException(status_code=404, detail="文书不存在")
+    
+    return DocumentResponse(
+        id=document.id,
+        title=document.title,
+        content=document.content,
+        document_type=document.document_type,
+        status=document.status,
+        ai_annotations=document.ai_annotations,
+        created_at=document.created_at
+    )
+
+
+@router.get("/{document_id}/download")
+async def download_document(
+    document_id: int,
+    format: str = 'pdf',
+    include_watermark: bool = False,
+    include_annotations: bool = False,
+    security_level: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    下载文档
+    
+    Args:
+        document_id: 文档 ID
+        format: 导出格式（pdf 或 docx）
+        include_watermark: 是否包含水印
+        include_annotations: 是否保留 AI 标注
+        security_level: 密级标注
+    """
+    # 获取文档
+    result = await db.execute(
+        select(Document).where(Document.id == document_id, Document.user_id == current_user.id)
+    )
+    document = result.scalar_one_or_none()
+    
+    if not document:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    
+    print(f"[Download] Exporting document ID: {document_id}, format: {format}")
+    
+    # 准备导出内容
+    content = document.content
+    
+    # 如果需要保留 AI 标注
+    if include_annotations and document.ai_annotations:
+        annotations = document.ai_annotations
+        if isinstance(annotations, dict) and annotations.get('errors'):
+            content += "\n\n--- AI 研判意见 ---\n"
+            for idx, error in enumerate(annotations['errors'], 1):
+                content += f"\n{idx}. {error.get('description', '')}"
+                if error.get('suggestion'):
+                    content += f"\n   建议：{error['suggestion']}"
+    
+    # 准备导出选项
+    export_options = {}
+    
+    if include_watermark:
+        export_options['watermark'] = "信访智能文书生成系统"
+    
+    if security_level:
+        export_options['security_level'] = security_level
+    
+    # 导出文档
+    try:
+        file_bytes = await document_export_service.export_document(
+            content=content,
+            title=document.title,
+            format=format,
+            options=export_options
+        )
+    except Exception as e:
+        print(f"[Download] Export error: {e}")
+        raise HTTPException(status_code=500, detail=f"文档导出失败: {str(e)}")
+    
+    # 记录审计日志
+    audit_log = AuditLog(
+        user_id=current_user.id,
+        action="download",
+        resource_type="document",
+        resource_id=document_id,
+        details={
+            "document_title": document.title,
+            "format": format,
+            "include_watermark": include_watermark,
+            "include_annotations": include_annotations,
+            "file_size": len(file_bytes)
+        }
+    )
+    db.add(audit_log)
+    await db.commit()
+    
+    print(f"[Download] Document exported successfully: {len(file_bytes)} bytes")
+    
+    # 返回文件
+    filename = f"{document.title}.{format}"
+    media_type = "application/pdf" if format == 'pdf' else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    
+    return Response(
+        content=file_bytes,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
+@router.put("/{document_id}", response_model=DocumentResponse)
+async def update_document(
+    document_id: int,
+    request: DocumentUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """更新文档并自动创建新版本"""
+    # 获取文档
+    result = await db.execute(
+        select(Document).where(Document.id == document_id, Document.user_id == current_user.id)
+    )
+    document = result.scalar_one_or_none()
+    
+    if not document:
+        raise HTTPException(status_code=404, detail="文书不存在")
+    
+    # 检查是否有实际变更
+    has_changes = False
+    old_content = document.content
+    old_structured_content = document.structured_content
+    
+    # 更新文档字段
+    if request.content is not None and request.content != document.content:
+        document.content = request.content
+        has_changes = True
+    
+    if request.structured_content is not None and request.structured_content != document.structured_content:
+        document.structured_content = request.structured_content
+        has_changes = True
+    
+    if request.title is not None:
+        document.title = request.title
+    
+    if request.status is not None:
+        document.status = request.status
+    
+    # 如果有内容变更，创建新版本
+    if has_changes:
+        # 获取当前最大版本号
+        result = await db.execute(
+            select(Version.version_number)
+            .where(Version.document_id == document_id)
+            .order_by(Version.version_number.desc())
+            .limit(1)
+        )
+        max_version = result.scalar_one_or_none()
+        next_version = (max_version or 0) + 1
+        
+        # 创建新版本
+        version = Version(
+            document_id=document_id,
+            user_id=current_user.id,
+            version_number=next_version,
+            content=document.content,
+            structured_content=document.structured_content,
+            change_description=request.change_description or f"版本 {next_version} - 文档更新",
+            is_rollback=0
+        )
+        db.add(version)
+        
+        print(f"[Update] Document {document_id} updated, version {next_version} created")
+    
+    # 记录审计日志
+    audit_log = AuditLog(
+        user_id=current_user.id,
+        action="update",
+        resource_type="document",
+        resource_id=document_id,
+        details={
+            "has_changes": has_changes,
+            "change_description": request.change_description,
+            "new_version": (max_version or 0) + 1 if has_changes else None
+        }
+    )
+    db.add(audit_log)
+    
+    await db.commit()
+    await db.refresh(document)
+    
+    return DocumentResponse(
+        id=document.id,
+        title=document.title,
+        content=document.content,
+        document_type=document.document_type,
+        status=document.status,
+        ai_annotations=document.ai_annotations,
+        created_at=document.created_at
+    )
+
+@router.get("/list", response_model=List[DocumentResponse])
+async def list_documents(
+    skip: int = 0,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """获取文档列表"""
+    result = await db.execute(
+        select(Document)
+        .where(Document.user_id == current_user.id)
+        .order_by(Document.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    documents = result.scalars().all()
+    
+    return [
+        DocumentResponse(
+            id=doc.id,
+            title=doc.title,
+            content=doc.content,
+            document_type=doc.document_type,
+            status=doc.status,
+            ai_annotations=doc.ai_annotations,
+            created_at=doc.created_at
+        )
+        for doc in documents
+    ]
+
+@router.get("/{document_id}", response_model=DocumentResponse)
+async def get_document(
+    document_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """获取文档详情"""
+    result = await db.execute(
+        select(Document).where(Document.id == document_id, Document.user_id == current_user.id)
+    )
+    document = result.scalar_one_or_none()
+    
+    if not document:
+        raise HTTPException(status_code=404, detail="文书不存在")
+    
+    return DocumentResponse(
+        id=document.id,
+        title=document.title,
+        content=document.content,
+        document_type=document.document_type,
+        status=document.status,
+        ai_annotations=document.ai_annotations,
+        created_at=document.created_at
+    )
