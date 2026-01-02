@@ -967,3 +967,57 @@ async def get_classifications():
             {"value": "top_secret", "label": "绝密", "color": "#909399"}
         ]
     }
+
+
+@router.get("/{document_id}/preview")
+async def get_document_preview(
+    document_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """获取文书预览URL"""
+    # 获取文档
+    result = await db.execute(
+        select(Document).where(Document.id == document_id, Document.user_id == current_user.id)
+    )
+    document = result.scalar_one_or_none()
+    
+    if not document:
+        raise HTTPException(status_code=404, detail="文书不存在")
+    
+    print(f"[Preview] Generating preview for document ID: {document_id}")
+    
+    try:
+        # 生成DOCX文件
+        from app.services.office_preview_service import office_preview_service
+        
+        docx_bytes = await document_export_service.export_to_docx(
+            content=document.content,
+            title=document.title,
+            options={"document_type": document.document_type}
+        )
+        
+        # 上传到MinIO
+        temp_filename = f"temp_preview/{current_user.id}/{document.id}.docx"
+        await minio_client.upload_file(
+            temp_filename,
+            docx_bytes,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        
+        # 获取预览URL
+        file_url = minio_client.get_file_url(temp_filename, expires=3600, inline=True)
+        preview_url = await office_preview_service.get_preview_url(file_url)
+        
+        print(f"[Preview] Preview URL generated: {preview_url}")
+        
+        return {
+            "preview_url": preview_url,
+            "file_url": file_url,
+            "document_id": document.id
+        }
+    except Exception as e:
+        print(f"[Preview] Error generating preview: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"生成预览失败: {str(e)}")

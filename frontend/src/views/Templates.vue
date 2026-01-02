@@ -66,6 +66,69 @@
       </template>
     </el-dialog>
 
+    <!-- 查看模板对话框 -->
+    <el-dialog v-model="viewDialogVisible" title="查看模板详情" width="800px">
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="模板名称">
+          {{ viewTemplate.name }}
+        </el-descriptions-item>
+        <el-descriptions-item label="文书类型">
+          {{ viewTemplate.document_type }}
+        </el-descriptions-item>
+        <el-descriptions-item label="版本">
+          {{ viewTemplate.version }}
+        </el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="viewTemplate.is_active ? 'success' : 'info'">
+            {{ viewTemplate.is_active ? '启用' : '停用' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="创建时间">
+          {{ formatDate(viewTemplate.created_at) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="更新时间">
+          {{ formatDate(viewTemplate.updated_at) }}
+        </el-descriptions-item>
+      </el-descriptions>
+
+      <el-divider>模板结构</el-divider>
+      <el-input 
+        v-model="viewTemplateStructure" 
+        type="textarea" 
+        :rows="6" 
+        readonly
+        placeholder="暂无结构信息"
+      />
+
+      <el-divider>字段列表</el-divider>
+      <el-table :data="viewTemplateFields" border>
+        <el-table-column prop="name" label="字段名称" />
+        <el-table-column prop="type" label="字段类型" width="120" />
+        <el-table-column prop="required" label="是否必填" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.required ? 'danger' : 'info'" size="small">
+              {{ row.required ? '必填' : '可选' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="default_value" label="默认值" />
+      </el-table>
+
+      <el-divider>模板内容</el-divider>
+      <el-input 
+        v-model="viewTemplate.content_template" 
+        type="textarea" 
+        :rows="10" 
+        readonly
+        placeholder="暂无模板内容"
+      />
+
+      <template #footer>
+        <el-button @click="viewDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="handleUseFromView">使用此模板</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 模板提取对话框 -->
     <el-dialog v-model="extractDialogVisible" title="从文件提取模板" width="800px">
       <el-steps :active="extractStep" finish-status="success" align-center style="margin-bottom: 20px">
@@ -227,6 +290,10 @@ const router = useRouter()
 const templateList = ref<any[]>([])
 const loading = ref(false)
 const createDialogVisible = ref(false)
+const viewDialogVisible = ref(false)
+const viewTemplate = ref<any>({})
+const viewTemplateStructure = ref('')
+const viewTemplateFields = ref<any[]>([])
 
 const form = ref({
   name: '',
@@ -294,11 +361,48 @@ const handleCreate = async () => {
 }
 
 const handleView = (row: any) => {
-  console.log('View:', row)
+  viewTemplate.value = { ...row }
+  
+  // 处理结构信息
+  if (row.structure) {
+    if (typeof row.structure === 'string') {
+      viewTemplateStructure.value = row.structure
+    } else {
+      viewTemplateStructure.value = JSON.stringify(row.structure, null, 2)
+    }
+  } else {
+    viewTemplateStructure.value = ''
+  }
+  
+  // 处理字段列表
+  if (row.fields) {
+    if (typeof row.fields === 'object' && !Array.isArray(row.fields)) {
+      // 如果是对象，转换为数组
+      viewTemplateFields.value = Object.entries(row.fields).map(([key, value]: [string, any]) => ({
+        name: value.name || key,
+        type: value.type || 'text',
+        required: value.required || false,
+        default_value: value.default_value || ''
+      }))
+    } else if (Array.isArray(row.fields)) {
+      viewTemplateFields.value = row.fields
+    } else {
+      viewTemplateFields.value = []
+    }
+  } else {
+    viewTemplateFields.value = []
+  }
+  
+  viewDialogVisible.value = true
 }
 
 const handleUse = (row: any) => {
   router.push({ path: '/generate', query: { templateId: row.id } })
+}
+
+const handleUseFromView = () => {
+  viewDialogVisible.value = false
+  router.push({ path: '/generate', query: { templateId: viewTemplate.value.id } })
 }
 
 // 模板提取流程

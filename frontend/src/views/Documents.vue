@@ -43,11 +43,73 @@
     </el-card>
     
     <!-- 文书详情对话框 -->
-    <el-dialog v-model="viewVisible" title="文书详情" width="80%">
-      <div v-if="currentDocument" class="document-content">
-        <h3>{{ currentDocument.title }}</h3>
-        <div class="content-text">{{ currentDocument.content }}</div>
+    <el-dialog 
+      v-model="viewVisible" 
+      title="文书详情" 
+      width="90%" 
+      top="5vh"
+      destroy-on-close
+    >
+      <div v-if="currentDocument" class="document-detail">
+        <!-- 文书信息 -->
+        <el-descriptions :column="2" border style="margin-bottom: 20px">
+          <el-descriptions-item label="标题">
+            {{ currentDocument.title }}
+          </el-descriptions-item>
+          <el-descriptions-item label="文书类型">
+            {{ currentDocument.document_type }}
+          </el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="getStatusType(currentDocument.status)">
+              {{ getStatusText(currentDocument.status) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="密级">
+            <el-tag :color="getClassificationColor(currentDocument.classification)">
+              {{ getClassificationText(currentDocument.classification) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="创建时间" :span="2">
+            {{ formatDate(currentDocument.created_at) }}
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <!-- 文书预览 -->
+        <el-divider>文书预览</el-divider>
+        <div class="document-preview-container">
+          <div v-if="previewLoading" class="preview-loading">
+            <el-icon :size="40" class="is-loading">
+              <Loading />
+            </el-icon>
+            <p>正在加载预览...</p>
+          </div>
+          <div v-else-if="previewUrl" class="preview-iframe-wrapper">
+            <iframe 
+              :src="previewUrl" 
+              frameborder="0" 
+              width="100%" 
+              height="100%"
+              class="document-preview-iframe"
+            ></iframe>
+          </div>
+          <div v-else class="preview-fallback">
+            <el-alert 
+              title="无法加载预览" 
+              type="warning" 
+              :closable="false"
+              style="margin-bottom: 20px"
+            >
+              文书预览暂时不可用，您可以查看文本内容或下载文档
+            </el-alert>
+            <div class="content-text">{{ currentDocument.content }}</div>
+          </div>
+        </div>
       </div>
+      
+      <template #footer>
+        <el-button @click="viewVisible = false">关闭</el-button>
+        <el-button type="primary" @click="handleDownload">下载文书</el-button>
+      </template>
     </el-dialog>
 
     <!-- 版本管理对话框 -->
@@ -96,12 +158,15 @@ import { ref, onMounted } from 'vue'
 import { getDocumentList, updateClassification } from '@/api/documents'
 import VersionManager from '@/components/VersionManager.vue'
 import { ElMessage } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 
 const documentList = ref([])
 const loading = ref(false)
 const viewVisible = ref(false)
 const versionVisible = ref(false)
 const currentDocument = ref<any>(null)
+const previewUrl = ref('')
+const previewLoading = ref(false)
 const classificationVisible = ref(false)
 const classificationForm = ref({
   documentId: 0,
@@ -122,9 +187,68 @@ const loadDocuments = async () => {
   }
 }
 
-const handleView = (row: any) => {
+const handleView = async (row: any) => {
   currentDocument.value = row
+  previewUrl.value = ''
+  previewLoading.value = true
   viewVisible.value = true
+  
+  try {
+    // 如果文书已经有预览URL，直接使用
+    if (row.preview_url) {
+      previewUrl.value = row.preview_url
+      previewLoading.value = false
+      return
+    }
+    
+    // 否则，生成预览URL
+    const response = await fetch(`http://localhost:8000/api/v1/documents/${row.id}/preview`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      if (data.preview_url) {
+        previewUrl.value = data.preview_url
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load preview:', error)
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+const handleDownload = async () => {
+  if (!currentDocument.value) return
+  
+  try {
+    const response = await fetch(`http://localhost:8000/api/v1/documents/${currentDocument.value.id}/export?format=docx`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+    
+    if (response.ok) {
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${currentDocument.value.title}.docx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      ElMessage.success('文书下载成功')
+    } else {
+      throw new Error('下载失败')
+    }
+  } catch (error) {
+    console.error('Download error:', error)
+    ElMessage.error('文书下载失败')
+  }
 }
 
 const handleEdit = (row: any) => {
@@ -218,18 +342,65 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.document-content {
-  padding: 20px;
+.document-detail {
+  padding: 10px;
 }
 
-.document-content h3 {
+.document-preview-container {
+  width: 100%;
+  height: 600px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: #f5f7fa;
+}
+
+.preview-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #909399;
+}
+
+.preview-loading .is-loading {
+  animation: rotating 2s linear infinite;
   margin-bottom: 20px;
-  color: #333;
+}
+
+@keyframes rotating {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.preview-iframe-wrapper {
+  width: 100%;
+  height: 100%;
+}
+
+.document-preview-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.preview-fallback {
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .content-text {
   white-space: pre-wrap;
   line-height: 1.8;
   color: #666;
+  background-color: white;
+  padding: 20px;
+  border-radius: 4px;
 }
 </style>
