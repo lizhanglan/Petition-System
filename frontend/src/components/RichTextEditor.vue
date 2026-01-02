@@ -2,16 +2,16 @@
   <div class="rich-text-editor">
     <div class="editor-toolbar">
       <div class="toolbar-group">
-        <button @click="execCommand('bold')" title="粗体" class="toolbar-btn">
+        <button @click.prevent="execCommand('bold')" type="button" title="粗体" class="toolbar-btn">
           <strong>B</strong>
         </button>
-        <button @click="execCommand('italic')" title="斜体" class="toolbar-btn">
+        <button @click.prevent="execCommand('italic')" type="button" title="斜体" class="toolbar-btn">
           <em>I</em>
         </button>
-        <button @click="execCommand('underline')" title="下划线" class="toolbar-btn">
+        <button @click.prevent="execCommand('underline')" type="button" title="下划线" class="toolbar-btn">
           <u>U</u>
         </button>
-        <button @click="execCommand('strikeThrough')" title="删除线" class="toolbar-btn">
+        <button @click.prevent="execCommand('strikeThrough')" type="button" title="删除线" class="toolbar-btn">
           <s>S</s>
         </button>
       </div>
@@ -38,16 +38,16 @@
       <div class="toolbar-divider"></div>
       
       <div class="toolbar-group">
-        <button @click="execCommand('justifyLeft')" title="左对齐" class="toolbar-btn">
+        <button @click.prevent="execCommand('justifyLeft')" type="button" title="左对齐" class="toolbar-btn">
           ≡
         </button>
-        <button @click="execCommand('justifyCenter')" title="居中" class="toolbar-btn">
+        <button @click.prevent="execCommand('justifyCenter')" type="button" title="居中" class="toolbar-btn">
           ≡
         </button>
-        <button @click="execCommand('justifyRight')" title="右对齐" class="toolbar-btn">
+        <button @click.prevent="execCommand('justifyRight')" type="button" title="右对齐" class="toolbar-btn">
           ≡
         </button>
-        <button @click="execCommand('justifyFull')" title="两端对齐" class="toolbar-btn">
+        <button @click.prevent="execCommand('justifyFull')" type="button" title="两端对齐" class="toolbar-btn">
           ≡
         </button>
       </div>
@@ -55,16 +55,16 @@
       <div class="toolbar-divider"></div>
       
       <div class="toolbar-group">
-        <button @click="execCommand('insertUnorderedList')" title="无序列表" class="toolbar-btn">
+        <button @click.prevent="execCommand('insertUnorderedList')" type="button" title="无序列表" class="toolbar-btn">
           ☰
         </button>
-        <button @click="execCommand('insertOrderedList')" title="有序列表" class="toolbar-btn">
+        <button @click.prevent="execCommand('insertOrderedList')" type="button" title="有序列表" class="toolbar-btn">
           ≣
         </button>
-        <button @click="execCommand('indent')" title="增加缩进" class="toolbar-btn">
+        <button @click.prevent="execCommand('indent')" type="button" title="增加缩进" class="toolbar-btn">
           →
         </button>
-        <button @click="execCommand('outdent')" title="减少缩进" class="toolbar-btn">
+        <button @click.prevent="execCommand('outdent')" type="button" title="减少缩进" class="toolbar-btn">
           ←
         </button>
       </div>
@@ -89,13 +89,13 @@
       <div class="toolbar-divider"></div>
       
       <div class="toolbar-group">
-        <button @click="insertTable" title="插入表格" class="toolbar-btn">
+        <button @click.prevent="insertTable" type="button" title="插入表格" class="toolbar-btn">
           ⊞
         </button>
-        <button @click="insertLink" title="插入链接" class="toolbar-btn">
+        <button @click.prevent="insertLink" type="button" title="插入链接" class="toolbar-btn">
           🔗
         </button>
-        <button @click="insertImage" title="插入图片" class="toolbar-btn">
+        <button @click.prevent="insertImage" type="button" title="插入图片" class="toolbar-btn">
           🖼
         </button>
       </div>
@@ -103,10 +103,10 @@
       <div class="toolbar-divider"></div>
       
       <div class="toolbar-group">
-        <button @click="undo" title="撤销" class="toolbar-btn">
+        <button @click.prevent="undo" type="button" title="撤销" class="toolbar-btn">
           ↶
         </button>
-        <button @click="redo" title="重做" class="toolbar-btn">
+        <button @click.prevent="redo" type="button" title="重做" class="toolbar-btn">
           ↷
         </button>
       </div>
@@ -114,7 +114,7 @@
       <div class="toolbar-divider"></div>
       
       <div class="toolbar-group">
-        <button @click="clearFormat" title="清除格式" class="toolbar-btn">
+        <button @click.prevent="clearFormat" type="button" title="清除格式" class="toolbar-btn">
           ✕
         </button>
       </div>

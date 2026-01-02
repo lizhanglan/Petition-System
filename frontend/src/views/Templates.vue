@@ -164,10 +164,10 @@
             style="cursor: pointer"
           >
             <el-table-column type="index" label="序号" width="60" />
-            <el-table-column prop="filename" label="文件名" />
+            <el-table-column prop="file_name" label="文件名" />
             <el-table-column prop="file_type" label="类型" width="100">
               <template #default="{ row }">
-                <el-tag size="small">{{ row.file_type.toUpperCase() }}</el-tag>
+                <el-tag size="small">{{ row.file_type?.toUpperCase() || 'UNKNOWN' }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="created_at" label="上传时间" width="180">
