@@ -43,7 +43,13 @@
     </el-card>
     
     <!-- 创建模板对话框 -->
-    <el-dialog v-model="createDialogVisible" title="创建模板" width="600px">
+    <el-dialog 
+      v-model="createDialogVisible" 
+      title="创建模板" 
+      width="90%" 
+      top="5vh"
+      destroy-on-close
+    >
       <el-form :model="form" label-width="100px">
         <el-form-item label="模板名称">
           <el-input v-model="form.name" placeholder="请输入模板名称" />
@@ -57,7 +63,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="模板内容">
-          <el-input v-model="form.content_template" type="textarea" :rows="10" placeholder="请输入模板内容" />
+          <RichTextEditor v-model="form.content_template" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -115,13 +121,7 @@
       </el-table>
 
       <el-divider>模板内容</el-divider>
-      <el-input 
-        v-model="viewTemplate.content_template" 
-        type="textarea" 
-        :rows="10" 
-        readonly
-        placeholder="暂无模板内容"
-      />
+      <div class="template-content-preview" v-html="viewTemplate.content_template"></div>
 
       <template #footer>
         <el-button @click="viewDialogVisible = false">关闭</el-button>
@@ -285,6 +285,7 @@ import { getTemplateList, createTemplate, extractTemplate, saveExtractedTemplate
 import { getFileList, uploadFile } from '@/api/files'
 import { ElMessage } from 'element-plus'
 import type { UploadInstance, UploadProps, UploadRawFile } from 'element-plus'
+import RichTextEditor from '@/components/RichTextEditor.vue'
 
 const router = useRouter()
 const templateList = ref<any[]>([])
@@ -442,7 +443,7 @@ const handleSelectFile = async (row: any) => {
 const handleSaveExtracted = async () => {
   try {
     // 处理fields：如果是数组，转换为对象；如果已经是对象，直接使用
-    let fieldsObj = {}
+    const fieldsObj: Record<string, any> = {}
     if (Array.isArray(extractedTemplate.value.fields)) {
       extractedTemplate.value.fields.forEach((field: any, index: number) => {
         const fieldId = field.id || field.name || `field_${index}`
@@ -454,7 +455,7 @@ const handleSaveExtracted = async () => {
         }
       })
     } else if (typeof extractedTemplate.value.fields === 'object') {
-      fieldsObj = extractedTemplate.value.fields
+      Object.assign(fieldsObj, extractedTemplate.value.fields)
     }
     
     // 确保structure是对象（dict）
@@ -636,5 +637,55 @@ watch(extractDialogVisible, (newVal) => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.template-content-preview {
+  min-height: 300px;
+  max-height: 500px;
+  padding: 20px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background-color: #f5f7fa;
+  overflow-y: auto;
+  line-height: 1.8;
+}
+
+.template-content-preview :deep(h1) {
+  font-size: 28px;
+  font-weight: bold;
+  margin: 16px 0;
+}
+
+.template-content-preview :deep(h2) {
+  font-size: 24px;
+  font-weight: bold;
+  margin: 14px 0;
+}
+
+.template-content-preview :deep(h3) {
+  font-size: 20px;
+  font-weight: bold;
+  margin: 12px 0;
+}
+
+.template-content-preview :deep(p) {
+  margin: 8px 0;
+}
+
+.template-content-preview :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+}
+
+.template-content-preview :deep(table td),
+.template-content-preview :deep(table th) {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.template-content-preview :deep(img) {
+  max-width: 100%;
+  height: auto;
 }
 </style>
