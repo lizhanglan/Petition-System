@@ -1,5 +1,8 @@
 <template>
   <div class="review-page">
+    <!-- 降级状态通知 -->
+    <FallbackNotice />
+    
     <el-card v-loading="loading">
       <template #header>
         <div class="card-header">
@@ -89,6 +92,7 @@ import { Download, Refresh } from '@element-plus/icons-vue'
 import { getFilePreview } from '@/api/files'
 import { reviewDocument } from '@/api/documents'
 import { ElMessage } from 'element-plus'
+import FallbackNotice from '@/components/FallbackNotice.vue'
 
 const route = useRoute()
 const fileId = Number(route.params.fileId)

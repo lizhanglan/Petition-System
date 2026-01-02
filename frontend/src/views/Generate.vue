@@ -1,5 +1,8 @@
 <template>
   <div class="generate-page">
+    <!-- 降级状态通知 -->
+    <FallbackNotice />
+    
     <el-row :gutter="20">
       <el-col :span="12">
         <el-card>
@@ -164,6 +167,7 @@ import {
   clearConversation
 } from '@/api/documents'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import FallbackNotice from '@/components/FallbackNotice.vue'
 
 const route = useRoute()
 const templates = ref<any[]>([])

@@ -87,8 +87,17 @@ class Settings(BaseSettings):
     FAILURE_THRESHOLD: int = 3  # 失败阈值（连续失败次数）
     RECOVERY_THRESHOLD: int = 2  # 恢复阈值（连续成功次数）
     LOCAL_VALIDATION_TIMEOUT: int = 3  # 本地验证超时时间（秒）
-    RULES_CONFIG_PATH: str = "backend/config/validation_rules.json"  # 规则配置文件路径
     RULES_AUTO_RELOAD: bool = True  # 是否自动重载规则配置
+    
+    @property
+    def RULES_CONFIG_PATH(self) -> str:
+        """获取规则配置文件的绝对路径"""
+        import os
+        from pathlib import Path
+        # 获取项目根目录（backend 目录）
+        backend_dir = Path(__file__).parent.parent.parent
+        config_path = backend_dir / "config" / "validation_rules.json"
+        return str(config_path)
     
     class Config:
         env_file = ".env"

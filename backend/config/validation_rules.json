@@ -36,6 +36,91 @@
       "suggestion": "日期应使用格式：YYYY年MM月DD日"
     },
     {
+      "id": "format_003",
+      "name": "标题格式检查",
+      "category": "format",
+      "priority": 93,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "pattern",
+      "parameters": {
+        "pattern": "^关于.*的(通知|报告|函|请示|批复|意见|决定)$",
+        "field": "title"
+      },
+      "error_type": "format_error",
+      "error_level": "warning",
+      "description": "标题格式不符合公文规范",
+      "suggestion": "标题应符合格式：关于XXX的XXX（通知/报告/函等）"
+    },
+    {
+      "id": "format_004",
+      "name": "落款格式检查",
+      "category": "format",
+      "priority": 92,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "pattern",
+      "parameters": {
+        "pattern": "\\d{4}年\\d{1,2}月\\d{1,2}日$",
+        "field": "signature"
+      },
+      "error_type": "format_error",
+      "error_level": "warning",
+      "description": "落款日期格式不正确",
+      "suggestion": "落款日期应在文末，格式为：YYYY年MM月DD日"
+    },
+    {
+      "id": "format_005",
+      "name": "电话号码格式检查",
+      "category": "format",
+      "priority": 88,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "pattern",
+      "parameters": {
+        "pattern": "1[3-9]\\d{9}",
+        "field": "phone"
+      },
+      "error_type": "format_error",
+      "error_level": "info",
+      "description": "电话号码格式可能不正确",
+      "suggestion": "请检查电话号码格式是否为11位手机号"
+    },
+    {
+      "id": "format_006",
+      "name": "邮箱格式检查",
+      "category": "format",
+      "priority": 87,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "pattern",
+      "parameters": {
+        "pattern": "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
+        "field": "email"
+      },
+      "error_type": "format_error",
+      "error_level": "info",
+      "description": "邮箱格式可能不正确",
+      "suggestion": "请检查邮箱格式是否正确"
+    },
+    {
+      "id": "format_007",
+      "name": "页眉页脚检查",
+      "category": "format",
+      "priority": 86,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "keyword",
+      "parameters": {
+        "keywords": ["页码", "共", "页"],
+        "mode": "any_of"
+      },
+      "error_type": "format_error",
+      "error_level": "info",
+      "description": "建议添加页码",
+      "suggestion": "多页文档建议添加页码标注"
+    },
+    {
       "id": "content_001",
       "name": "文书长度检查",
       "category": "content",
@@ -87,6 +172,91 @@
       "suggestion": "请补充必填字段：主送单位、正文、落款"
     },
     {
+      "id": "content_004",
+      "name": "签名检查",
+      "category": "content",
+      "priority": 78,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "keyword",
+      "parameters": {
+        "keywords": ["（签字）", "（盖章）", "签发人"],
+        "mode": "any_of"
+      },
+      "error_type": "content_error",
+      "error_level": "warning",
+      "description": "缺少签名或盖章标注",
+      "suggestion": "建议添加签字或盖章标注"
+    },
+    {
+      "id": "content_005",
+      "name": "附件说明检查",
+      "category": "content",
+      "priority": 76,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "keyword",
+      "parameters": {
+        "keywords": ["附件：", "附件"],
+        "mode": "any_of"
+      },
+      "error_type": "content_error",
+      "error_level": "info",
+      "description": "如有附件，建议标注附件清单",
+      "suggestion": "如有附件，请在文末标注附件清单"
+    },
+    {
+      "id": "content_006",
+      "name": "抄送单位检查",
+      "category": "content",
+      "priority": 74,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "keyword",
+      "parameters": {
+        "keywords": ["抄送：", "抄送"],
+        "mode": "any_of"
+      },
+      "error_type": "content_error",
+      "error_level": "info",
+      "description": "如需抄送，建议标注抄送单位",
+      "suggestion": "如需抄送其他单位，请在文末标注"
+    },
+    {
+      "id": "content_007",
+      "name": "段落结构检查",
+      "category": "content",
+      "priority": 72,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "pattern",
+      "parameters": {
+        "pattern": "\\n\\n",
+        "field": "content"
+      },
+      "error_type": "content_error",
+      "error_level": "info",
+      "description": "建议使用段落分隔",
+      "suggestion": "建议使用空行分隔段落，提高可读性"
+    },
+    {
+      "id": "content_008",
+      "name": "标点符号检查",
+      "category": "content",
+      "priority": 70,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "pattern",
+      "parameters": {
+        "pattern": "[\\uFF0C\\u3002\\uFF01\\uFF1F\\uFF1B\\uFF1A\\u201C\\u201D\\u2018\\u2019\\uFF08\\uFF09]",
+        "field": "content"
+      },
+      "error_type": "content_error",
+      "error_level": "info",
+      "description": "建议使用中文标点符号",
+      "suggestion": "公文应使用中文标点符号"
+    },
+    {
       "id": "compliance_001",
       "name": "案件编号检查",
       "category": "compliance",
@@ -119,6 +289,74 @@
       "error_level": "info",
       "description": "未标注密级",
       "suggestion": "建议标注文书密级"
+    },
+    {
+      "id": "compliance_003",
+      "name": "收件人信息检查",
+      "category": "compliance",
+      "priority": 68,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "keyword",
+      "parameters": {
+        "keywords": ["收件人", "联系方式", "地址"],
+        "mode": "any_of"
+      },
+      "error_type": "compliance_error",
+      "error_level": "warning",
+      "description": "缺少收件人信息",
+      "suggestion": "建议补充收件人姓名、联系方式或地址"
+    },
+    {
+      "id": "compliance_004",
+      "name": "法规引用检查",
+      "category": "compliance",
+      "priority": 66,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "pattern",
+      "parameters": {
+        "pattern": "《.*法》|《.*条例》|《.*规定》",
+        "field": "content"
+      },
+      "error_type": "compliance_error",
+      "error_level": "info",
+      "description": "涉及法规引用",
+      "suggestion": "请确保法规名称准确，引用条款正确"
+    },
+    {
+      "id": "compliance_005",
+      "name": "时效性检查",
+      "category": "compliance",
+      "priority": 64,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "keyword",
+      "parameters": {
+        "keywords": ["有效期", "截止日期", "期限"],
+        "mode": "any_of"
+      },
+      "error_type": "compliance_error",
+      "error_level": "info",
+      "description": "涉及时效性要求",
+      "suggestion": "请明确标注有效期或截止日期"
+    },
+    {
+      "id": "compliance_006",
+      "name": "紧急程度标注检查",
+      "category": "compliance",
+      "priority": 62,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "keyword",
+      "parameters": {
+        "keywords": ["特急", "加急", "平急"],
+        "mode": "any_of"
+      },
+      "error_type": "compliance_error",
+      "error_level": "info",
+      "description": "建议标注紧急程度",
+      "suggestion": "如有时效要求，建议标注紧急程度（特急/加急/平急）"
     }
   ],
   "templates": [

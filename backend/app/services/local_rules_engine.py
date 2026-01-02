@@ -150,27 +150,45 @@ class LocalRulesEngine:
             规则统计字典
         """
         config_info = self.config_manager.get_config_info()
+        all_rules = self.config_manager.current_config.rules if self.config_manager.current_config else []
         enabled_rules = self.config_manager.get_enabled_rules()
         
-        # 按类别统计
+        # 按类别统计（包含所有规则）
         category_stats = {}
-        for rule in enabled_rules:
+        for rule in all_rules:
             category = rule.category
             if category not in category_stats:
                 category_stats[category] = {
                     "count": 0,
+                    "enabled_count": 0,
                     "critical_count": 0
                 }
             category_stats[category]["count"] += 1
+            if rule.enabled:
+                category_stats[category]["enabled_count"] += 1
             if rule.critical:
                 category_stats[category]["critical_count"] += 1
         
-        return {
+        total_rules = len(all_rules)
+        enabled_count = len(enabled_rules)
+        disabled_count = total_rules - enabled_count
+        
+        result = {
             "config_info": config_info,
-            "enabled_rules_count": len(enabled_rules),
+            "enabled_rules_count": enabled_count,
             "category_statistics": category_stats,
-            "performance_metrics": self.get_performance_metrics()
+            "performance_metrics": self.get_performance_metrics(),
+            # 添加前端需要的字段
+            "total_rules": total_rules,
+            "enabled_rules": enabled_count,
+            "disabled_rules": disabled_count,
+            "rules_by_category": category_stats
         }
+        
+        logger.info(f"Statistics result keys: {list(result.keys())}")
+        logger.info(f"Statistics: total={total_rules}, enabled={enabled_count}, disabled={disabled_count}")
+        
+        return result
 
 
 # 全局实例（将在应用启动时初始化）

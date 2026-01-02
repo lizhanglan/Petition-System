@@ -27,6 +27,17 @@
         <el-menu-item index="/audit-logs">
           <span>审计日志</span>
         </el-menu-item>
+        <el-sub-menu index="/system">
+          <template #title>
+            <span>系统管理</span>
+          </template>
+          <el-menu-item index="/system-health">
+            <span>健康监控</span>
+          </el-menu-item>
+          <el-menu-item index="/rules-management">
+            <span>规则管理</span>
+          </el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
     

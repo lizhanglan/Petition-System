@@ -137,7 +137,14 @@ class HealthMonitorService:
         
         # 记录降级持续时间
         if self.fallback_start_time:
-            duration = (datetime.now() - self.fallback_start_time).total_seconds()
+            # 确保 fallback_start_time 是 datetime 对象
+            if isinstance(self.fallback_start_time, (int, float)):
+                from datetime import datetime as dt
+                fallback_start = dt.fromtimestamp(self.fallback_start_time)
+            else:
+                fallback_start = self.fallback_start_time
+            
+            duration = (datetime.now() - fallback_start).total_seconds()
             self.total_fallback_duration += duration
             logger.info(f"本次降级持续时间: {duration:.1f}秒")
         
@@ -219,7 +226,14 @@ class HealthMonitorService:
         # 计算当前降级持续时间
         current_fallback_duration = None
         if self.fallback_start_time:
-            current_fallback_duration = int((datetime.now() - self.fallback_start_time).total_seconds())
+            # 确保 fallback_start_time 是 datetime 对象
+            if isinstance(self.fallback_start_time, (int, float)):
+                from datetime import datetime as dt
+                fallback_start = dt.fromtimestamp(self.fallback_start_time)
+            else:
+                fallback_start = self.fallback_start_time
+            
+            current_fallback_duration = int((datetime.now() - fallback_start).total_seconds())
         
         return HealthStatus(
             mode=self.mode,
