@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# 日志和临时文件
+*.log
+logs/
+uploads/
+*.tmp
+
+# 环境变量
+.env
+.env.local
+
+# Git
+.git/
+.gitignore
+
+# 文档
+docs/
+*.md
+!README.md
+
+# 测试文件
+test_*.py
+tests/
