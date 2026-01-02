@@ -2,14 +2,17 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 
+// 使用相对路径，通过nginx代理访问后端
+// 生产环境: /api/v1 -> nginx代理 -> backend:8000/api/v1
+// 开发环境: 可以通过vite.config.ts配置代理
 const request = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
+  baseURL: '/api/v1',
   timeout: 30000
 })
 
 // 创建一个用于长时间操作的请求实例（如AI处理）
 export const longRequest = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
+  baseURL: '/api/v1',
   timeout: 120000 // 120秒超时
 })
 
