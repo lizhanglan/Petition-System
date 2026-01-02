@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
 from datetime import datetime
 from app.core.database import get_db
+from app.core.rate_limiter import ai_rate_limit, user_rate_limit
 from app.models.user import User
 from app.models.document import Document
 from app.models.file import File
@@ -13,6 +14,9 @@ from app.api.v1.endpoints.auth import get_current_user
 from app.services.deepseek_service import deepseek_service
 from app.services.file_parser_service import file_parser_service
 from app.services.document_export_service import document_export_service
+from app.services.conversation_service import conversation_service
+from app.services.health_monitor_service import get_health_monitor
+from app.services.local_rules_engine import get_local_rules_engine
 from app.core.minio_client import minio_client
 from pydantic import BaseModel
 from fastapi.responses import Response
@@ -27,11 +31,20 @@ class DocumentReviewResponse(BaseModel):
     document_id: int
     errors: List[dict]
     summary: str
+    fallback_mode: Optional[bool] = False  # 新增：是否降级模式
+    fallback_notice: Optional[str] = None  # 新增：降级通知
+    estimated_recovery: Optional[int] = None  # 新增：预计恢复时间
 
 class DocumentGenerateRequest(BaseModel):
     template_id: int
     prompt: str
     context: Optional[List[dict]] = None
+    session_id: Optional[str] = None  # 新增：会话ID
+    file_references: Optional[List[int]] = None  # 新增：文件引用
+
+class ConversationHistoryResponse(BaseModel):
+    messages: List[dict]
+    session_info: dict
 
 class DocumentResponse(BaseModel):
     id: int
@@ -39,6 +52,7 @@ class DocumentResponse(BaseModel):
     content: str
     document_type: str
     status: str
+    classification: Optional[str] = "public"  # 新增：密级
     ai_annotations: Optional[dict]
     created_at: datetime
 
@@ -47,11 +61,17 @@ class DocumentUpdateRequest(BaseModel):
     structured_content: Optional[dict] = None
     title: Optional[str] = None
     status: Optional[str] = None
+    classification: Optional[str] = None  # 新增：密级
     change_description: Optional[str] = None
 
+class ClassificationUpdateRequest(BaseModel):
+    classification: str  # public, internal, confidential, secret, top_secret
+
 @router.post("/review", response_model=DocumentReviewResponse)
+@ai_rate_limit
 async def review_document(
     request: DocumentReviewRequest,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -85,27 +105,92 @@ async def review_document(
     
     print(f"[Review] File parsed: {len(file_content)} characters")
     
-    # 调用 AI 研判
-    print(f"[Review] Calling AI service for review...")
-    review_result = await deepseek_service.review_document(file_content)
+    # 检查是否需要使用降级模式
+    health_monitor = get_health_monitor()
+    local_engine = get_local_rules_engine()
+    use_fallback = False
+    fallback_reason = None
     
-    if not review_result:
-        raise HTTPException(
-            status_code=500, 
-            detail="AI 研判服务暂时不可用，请检查 API 配置或稍后重试。可能的原因：API Key 无效、网络连接问题、服务超时。"
-        )
+    if health_monitor and health_monitor.is_fallback_mode():
+        use_fallback = True
+        fallback_reason = "AI 服务当前不可用，使用本地规则库进行基础校验"
+        print(f"[Review] 使用降级模式: {fallback_reason}")
     
-    print(f"[Review] AI review completed")
+    # 执行研判
+    review_data = None
     
-    # 解析 AI 返回结果
-    try:
-        review_data = json.loads(review_result)
-    except:
-        # 如果不是 JSON 格式，尝试解析为简单格式
-        review_data = {
-            "errors": [],
-            "summary": review_result
-        }
+    if use_fallback and local_engine:
+        # 使用本地规则引擎
+        print(f"[Review] 使用本地规则引擎进行验证...")
+        try:
+            validation_result = await local_engine.validate_document(file_content, parsed_data)
+            
+            # 转换为统一格式
+            review_data = {
+                "errors": [error.dict() for error in validation_result.errors],
+                "summary": validation_result.summary
+            }
+            
+            print(f"[Review] 本地规则验证完成: {len(validation_result.errors)} 个问题")
+            
+        except Exception as e:
+            print(f"[Review] 本地规则引擎失败: {e}")
+            # 如果本地引擎也失败，尝试 AI 服务
+            use_fallback = False
+    
+    if not use_fallback:
+        # 调用 AI 研判
+        print(f"[Review] Calling AI service for review...")
+        try:
+            review_result = await deepseek_service.review_document(file_content)
+            
+            if not review_result:
+                # AI 服务失败，尝试降级
+                if local_engine:
+                    print(f"[Review] AI 服务失败，降级到本地规则引擎...")
+                    use_fallback = True
+                    fallback_reason = "AI 服务调用失败，已切换到本地规则库"
+                    
+                    validation_result = await local_engine.validate_document(file_content, parsed_data)
+                    review_data = {
+                        "errors": [error.dict() for error in validation_result.errors],
+                        "summary": validation_result.summary
+                    }
+                else:
+                    raise HTTPException(
+                        status_code=500,
+                        detail="AI 研判服务暂时不可用，且本地规则库未初始化。请稍后重试。"
+                    )
+            else:
+                # 解析 AI 返回结果
+                try:
+                    review_data = json.loads(review_result)
+                except:
+                    review_data = {
+                        "errors": [],
+                        "summary": review_result
+                    }
+        
+        except Exception as e:
+            print(f"[Review] AI 服务异常: {e}")
+            # 尝试降级
+            if local_engine:
+                print(f"[Review] 降级到本地规则引擎...")
+                use_fallback = True
+                fallback_reason = f"AI 服务异常（{str(e)}），已切换到本地规则库"
+                
+                validation_result = await local_engine.validate_document(file_content, parsed_data)
+                review_data = {
+                    "errors": [error.dict() for error in validation_result.errors],
+                    "summary": validation_result.summary
+                }
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"AI 研判服务异常: {str(e)}"
+                )
+    
+    print(f"[Review] Review completed, fallback_mode: {use_fallback}")
     
     # 确保数据结构正确
     if not isinstance(review_data.get("errors"), list):
@@ -162,20 +247,66 @@ async def review_document(
     
     print(f"[Review] Review completed for document ID: {document.id}, version 1 created")
     
-    return DocumentReviewResponse(
+    # 准备响应
+    response = DocumentReviewResponse(
         document_id=document.id,
         errors=review_data.get("errors", []),
         summary=review_data.get("summary", "")
     )
+    
+    # 添加降级信息
+    if use_fallback:
+        response.fallback_mode = True
+        response.fallback_notice = fallback_reason
+        if health_monitor:
+            response.estimated_recovery = health_monitor.get_estimated_recovery_time()
+        
+        # 记录降级事件到审计日志
+        fallback_log = AuditLog(
+            user_id=current_user.id,
+            action="fallback_review",
+            resource_type="document",
+            details={
+                "file_id": file.id,
+                "file_name": file.file_name,
+                "fallback_reason": fallback_reason,
+                "errors_count": len(review_data.get("errors", []))
+            }
+        )
+        db.add(fallback_log)
+        await db.commit()
+    
+    return response
 
 @router.post("/generate", response_model=DocumentResponse)
+@ai_rate_limit
 async def generate_document(
     request: DocumentGenerateRequest,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """AI 生成文书"""
+    """AI 生成文书（支持多轮对话）"""
     print(f"[Generate] Starting document generation for template ID: {request.template_id}")
+    print(f"[Generate] Session ID: {request.session_id}")
+    
+    # 添加用户消息到对话历史
+    conversation_service.add_message(
+        user_id=current_user.id,
+        role="user",
+        content=request.prompt,
+        session_id=request.session_id,
+        metadata={"template_id": request.template_id}
+    )
+    
+    # 处理文件引用
+    if request.file_references:
+        for file_id in request.file_references:
+            conversation_service.add_file_reference(
+                user_id=current_user.id,
+                file_id=file_id,
+                session_id=request.session_id
+            )
     
     # 获取模板
     from app.models.template import Template
@@ -197,18 +328,65 @@ async def generate_document(
         "structure": template.structure or {}
     }
     
+    # 获取对话上下文（使用服务管理的上下文）
+    context = conversation_service.get_context_for_ai(
+        user_id=current_user.id,
+        session_id=request.session_id
+    )
+    
+    print(f"[Generate] Using conversation context: {len(context)} messages")
+    
+    # 获取文件引用内容
+    file_context = ""
+    file_refs = conversation_service.get_file_references(
+        user_id=current_user.id,
+        session_id=request.session_id
+    )
+    
+    if file_refs:
+        print(f"[Generate] Loading {len(file_refs)} referenced files")
+        for file_id in file_refs:
+            result = await db.execute(
+                select(File).where(File.id == file_id, File.user_id == current_user.id)
+            )
+            file = result.scalar_one_or_none()
+            if file:
+                # 读取文件内容
+                file_bytes = await minio_client.download_file(file.storage_path)
+                if file_bytes:
+                    parsed_data = await file_parser_service.parse_file(file_bytes, file.file_type)
+                    if parsed_data and parsed_data.get('text'):
+                        file_context += f"\n\n--- 参考文件：{file.file_name} ---\n{parsed_data['text'][:1000]}"  # 限制长度
+    
     # 调用 AI 生成
     print(f"[Generate] Calling AI with prompt length: {len(request.prompt)}")
     generated_content = await deepseek_service.generate_document(
         request.prompt,
         template_info,
-        request.context
+        context,
+        file_context=file_context if file_context else None
     )
     
     if not generated_content:
+        # 添加失败消息到对话历史
+        conversation_service.add_message(
+            user_id=current_user.id,
+            role="assistant",
+            content="抱歉，生成失败，请稍后重试。",
+            session_id=request.session_id
+        )
         raise HTTPException(status_code=500, detail="AI 生成失败，请稍后重试")
     
     print(f"[Generate] AI generation completed, content length: {len(generated_content)}")
+    
+    # 添加 AI 回复到对话历史
+    conversation_service.add_message(
+        user_id=current_user.id,
+        role="assistant",
+        content=f"已生成文书，共 {len(generated_content)} 字。",
+        session_id=request.session_id,
+        metadata={"content_length": len(generated_content)}
+    )
     
     # 解析生成的内容，尝试提取结构化字段
     structured_content = _parse_generated_content(generated_content, template.fields or {})
@@ -237,7 +415,10 @@ async def generate_document(
             "template_id": template.id,
             "template_name": template.name,
             "prompt_length": len(request.prompt),
-            "content_length": len(final_content)
+            "content_length": len(final_content),
+            "session_id": request.session_id,
+            "context_messages": len(context),
+            "file_references": len(file_refs) if file_refs else 0
         }
     )
     db.add(audit_log)
@@ -527,6 +708,9 @@ async def update_document(
     if request.status is not None:
         document.status = request.status
     
+    if request.classification is not None:
+        document.classification = request.classification
+    
     # 如果有内容变更，创建新版本
     if has_changes:
         # 获取当前最大版本号
@@ -634,3 +818,122 @@ async def get_document(
         ai_annotations=document.ai_annotations,
         created_at=document.created_at
     )
+
+
+# 新增：对话管理接口
+
+@router.get("/conversation/history", response_model=ConversationHistoryResponse)
+async def get_conversation_history(
+    session_id: Optional[str] = None,
+    limit: Optional[int] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """获取对话历史"""
+    messages = conversation_service.get_history(
+        user_id=current_user.id,
+        session_id=session_id,
+        limit=limit
+    )
+    
+    session_info = conversation_service.get_session_info(
+        user_id=current_user.id,
+        session_id=session_id
+    )
+    
+    return ConversationHistoryResponse(
+        messages=messages,
+        session_info=session_info
+    )
+
+
+@router.delete("/conversation/clear")
+async def clear_conversation(
+    session_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """清除对话历史"""
+    success = conversation_service.clear_history(
+        user_id=current_user.id,
+        session_id=session_id
+    )
+    
+    return {"success": success, "message": "对话历史已清除"}
+
+
+@router.get("/conversation/info")
+async def get_conversation_info(
+    session_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """获取对话会话信息"""
+    session_info = conversation_service.get_session_info(
+        user_id=current_user.id,
+        session_id=session_id
+    )
+    
+    return session_info
+
+
+
+@router.put("/{document_id}/classification")
+async def update_classification(
+    document_id: int,
+    request: ClassificationUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """更新文书密级"""
+    # 验证密级值
+    valid_classifications = ["public", "internal", "confidential", "secret", "top_secret"]
+    if request.classification not in valid_classifications:
+        raise HTTPException(
+            status_code=400,
+            detail=f"无效的密级。有效值：{', '.join(valid_classifications)}"
+        )
+    
+    # 获取文档
+    result = await db.execute(
+        select(Document).where(Document.id == document_id, Document.user_id == current_user.id)
+    )
+    document = result.scalar_one_or_none()
+    
+    if not document:
+        raise HTTPException(status_code=404, detail="文书不存在")
+    
+    old_classification = document.classification
+    document.classification = request.classification
+    
+    # 记录审计日志
+    audit_log = AuditLog(
+        user_id=current_user.id,
+        action="update_classification",
+        resource_type="document",
+        resource_id=document_id,
+        details={
+            "old_classification": old_classification,
+            "new_classification": request.classification
+        }
+    )
+    db.add(audit_log)
+    
+    await db.commit()
+    await db.refresh(document)
+    
+    return {
+        "success": True,
+        "message": "密级更新成功",
+        "classification": document.classification
+    }
+
+@router.get("/classifications")
+async def get_classifications():
+    """获取所有可用的密级选项"""
+    return {
+        "classifications": [
+            {"value": "public", "label": "公开", "color": "#67C23A"},
+            {"value": "internal", "label": "内部", "color": "#409EFF"},
+            {"value": "confidential", "label": "秘密", "color": "#E6A23C"},
+            {"value": "secret", "label": "机密", "color": "#F56C6C"},
+            {"value": "top_secret", "label": "绝密", "color": "#909399"}
+        ]
+    }

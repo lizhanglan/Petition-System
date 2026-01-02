@@ -14,6 +14,7 @@ class Document(Base):
     structured_content = Column(JSON)  # 结构化内容（字段+值）
     document_type = Column(String(50))  # 文书类型
     status = Column(String(20), default="draft")  # draft, reviewed, finalized
+    classification = Column(String(20), default="public")  # 密级：public, internal, confidential, secret, top_secret
     ai_annotations = Column(JSON)  # AI 标注信息
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

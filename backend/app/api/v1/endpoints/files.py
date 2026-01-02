@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 import hashlib
 from datetime import datetime
 from app.core.database import get_db
+from app.core.rate_limiter import upload_rate_limit, user_rate_limit
 from app.models.user import User
 from app.models.file import File
 from app.models.audit_log import AuditLog
@@ -26,12 +27,14 @@ class FileResponse(BaseModel):
     preview_url: str = None
 
 @router.post("/upload", response_model=FileResponse)
+@upload_rate_limit
 async def upload_file(
     file: UploadFile = FastAPIFile(...),
+    req: Request = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """上传文件"""
+    """上传单个文件"""
     # 验证文件类型
     file_ext = file.filename.split(".")[-1].lower()
     if file_ext not in settings.ALLOWED_EXTENSIONS_LIST:
@@ -95,6 +98,123 @@ async def upload_file(
         status=db_file.status,
         created_at=db_file.created_at,
         preview_url=preview_url or ""
+    )
+
+class BatchUploadResult(BaseModel):
+    success_count: int
+    failed_count: int
+    total_count: int
+    results: List[dict]
+
+@router.post("/batch-upload", response_model=BatchUploadResult)
+@upload_rate_limit
+async def batch_upload_files(
+    files: List[UploadFile] = FastAPIFile(...),
+    req: Request = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """批量上传文件"""
+    results = []
+    success_count = 0
+    failed_count = 0
+    
+    for file in files:
+        try:
+            # 验证文件类型
+            file_ext = file.filename.split(".")[-1].lower()
+            if file_ext not in settings.ALLOWED_EXTENSIONS_LIST:
+                results.append({
+                    "file_name": file.filename,
+                    "success": False,
+                    "error": f"不支持的文件类型"
+                })
+                failed_count += 1
+                continue
+            
+            # 读取文件内容
+            file_content = await file.read()
+            file_size = len(file_content)
+            
+            # 验证文件大小
+            if file_size > settings.MAX_UPLOAD_SIZE:
+                results.append({
+                    "file_name": file.filename,
+                    "success": False,
+                    "error": f"文件大小超过限制"
+                })
+                failed_count += 1
+                continue
+            
+            # 计算文件哈希
+            file_hash = hashlib.sha256(file_content).hexdigest()
+            
+            # 生成存储路径
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")  # 添加微秒避免冲突
+            storage_path = f"uploads/{current_user.id}/{timestamp}_{file.filename}"
+            
+            # 上传到 MinIO
+            content_type = file.content_type or "application/octet-stream"
+            success = await minio_client.upload_file(storage_path, file_content, content_type)
+            
+            if not success:
+                results.append({
+                    "file_name": file.filename,
+                    "success": False,
+                    "error": "MinIO 上传失败"
+                })
+                failed_count += 1
+                continue
+            
+            # 保存文件记录
+            db_file = File(
+                user_id=current_user.id,
+                file_name=file.filename,
+                file_type=file_ext,
+                file_size=file_size,
+                storage_path=storage_path,
+                file_hash=file_hash,
+                status="uploaded"
+            )
+            db.add(db_file)
+            await db.flush()  # 获取 ID
+            
+            results.append({
+                "file_name": file.filename,
+                "success": True,
+                "file_id": db_file.id,
+                "file_size": file_size
+            })
+            success_count += 1
+            
+        except Exception as e:
+            results.append({
+                "file_name": file.filename,
+                "success": False,
+                "error": str(e)
+            })
+            failed_count += 1
+    
+    # 记录审计日志
+    audit_log = AuditLog(
+        user_id=current_user.id,
+        action="batch_upload",
+        resource_type="file",
+        details={
+            "total_count": len(files),
+            "success_count": success_count,
+            "failed_count": failed_count
+        }
+    )
+    db.add(audit_log)
+    
+    await db.commit()
+    
+    return BatchUploadResult(
+        success_count=success_count,
+        failed_count=failed_count,
+        total_count=len(files),
+        results=results
     )
 
 @router.get("/list", response_model=List[FileResponse])

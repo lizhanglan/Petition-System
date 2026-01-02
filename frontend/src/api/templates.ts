@@ -11,3 +11,11 @@ export const getTemplateList = (documentType?: string, skip: number = 0, limit: 
 export const getTemplate = (templateId: number) => {
   return request.get(`/templates/${templateId}`)
 }
+
+export const extractTemplate = (fileId: number, autoSave: boolean = false) => {
+  return request.post('/templates/extract', { file_id: fileId, auto_save: autoSave })
+}
+
+export const saveExtractedTemplate = (data: any) => {
+  return request.post('/templates/save-extracted', data)
+}

@@ -9,6 +9,17 @@ export const uploadFile = (file: File) => {
   })
 }
 
+export const batchUploadFiles = (files: File[]) => {
+  const formData = new FormData()
+  files.forEach(file => {
+    formData.append('files', file)
+  })
+  
+  return request.post('/files/batch-upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
 export const getFileList = (skip: number = 0, limit: number = 20) => {
   return request.get('/files/list', { params: { skip, limit } })
 }
@@ -20,3 +31,4 @@ export const getFilePreview = (fileId: number) => {
 export const deleteFile = (fileId: number) => {
   return request.delete(`/files/${fileId}`)
 }
+

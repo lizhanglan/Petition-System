@@ -41,3 +41,11 @@ logs/
 # OS
 Thumbs.db
 .DS_Store
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Archive (optional - uncomment if you don't want to track archived docs)
+# docs/archive/

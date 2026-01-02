@@ -50,6 +50,11 @@ const router = createRouter({
           path: 'templates',
           name: 'Templates',
           component: () => import('@/views/Templates.vue')
+        },
+        {
+          path: 'audit-logs',
+          name: 'AuditLogs',
+          component: () => import('@/views/AuditLogs.vue')
         }
       ]
     }

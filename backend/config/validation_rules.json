@@ -1,0 +1,140 @@
+{
+  "version": "1.0",
+  "rules": [
+    {
+      "id": "format_001",
+      "name": "文号格式检查",
+      "category": "format",
+      "priority": 100,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "pattern",
+      "parameters": {
+        "pattern": "^[A-Z]+〔\\d{4}〕\\d+号$",
+        "field": "document_number"
+      },
+      "error_type": "format_error",
+      "error_level": "warning",
+      "description": "文号格式不符合规范",
+      "suggestion": "文号应符合格式：机关代字〔年份〕序号号，例如：京信〔2024〕001号"
+    },
+    {
+      "id": "format_002",
+      "name": "日期格式检查",
+      "category": "format",
+      "priority": 95,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "pattern",
+      "parameters": {
+        "pattern": "\\d{4}年\\d{1,2}月\\d{1,2}日",
+        "field": "date"
+      },
+      "error_type": "format_error",
+      "error_level": "warning",
+      "description": "日期格式不正确",
+      "suggestion": "日期应使用格式：YYYY年MM月DD日"
+    },
+    {
+      "id": "content_001",
+      "name": "文书长度检查",
+      "category": "content",
+      "priority": 90,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "length",
+      "parameters": {
+        "min_length": 100,
+        "max_length": 50000
+      },
+      "error_type": "content_error",
+      "error_level": "error",
+      "description": "文书长度超出范围",
+      "suggestion": "文书长度应在100-50000字之间"
+    },
+    {
+      "id": "content_002",
+      "name": "禁用词检查",
+      "category": "content",
+      "priority": 85,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "keyword",
+      "parameters": {
+        "keywords": ["敏感词1", "敏感词2"],
+        "mode": "prohibited"
+      },
+      "error_type": "content_error",
+      "error_level": "error",
+      "description": "文书包含禁用词",
+      "suggestion": "请删除或替换禁用词"
+    },
+    {
+      "id": "content_003",
+      "name": "必填字段检查",
+      "category": "content",
+      "priority": 80,
+      "enabled": true,
+      "critical": true,
+      "rule_type": "keyword",
+      "parameters": {
+        "keywords": ["主送单位", "正文", "落款"],
+        "mode": "required"
+      },
+      "error_type": "content_error",
+      "error_level": "error",
+      "description": "文书缺少必填字段",
+      "suggestion": "请补充必填字段：主送单位、正文、落款"
+    },
+    {
+      "id": "compliance_001",
+      "name": "案件编号检查",
+      "category": "compliance",
+      "priority": 75,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "pattern",
+      "parameters": {
+        "pattern": "\\d{4}-\\d{4}-\\d{6}",
+        "field": "case_number"
+      },
+      "error_type": "compliance_error",
+      "error_level": "warning",
+      "description": "案件编号格式不正确",
+      "suggestion": "案件编号应符合格式：YYYY-XXXX-XXXXXX"
+    },
+    {
+      "id": "compliance_002",
+      "name": "密级标注检查",
+      "category": "compliance",
+      "priority": 70,
+      "enabled": true,
+      "critical": false,
+      "rule_type": "keyword",
+      "parameters": {
+        "keywords": ["公开", "内部", "秘密", "机密", "绝密"],
+        "mode": "any_of"
+      },
+      "error_type": "compliance_error",
+      "error_level": "info",
+      "description": "未标注密级",
+      "suggestion": "建议标注文书密级"
+    }
+  ],
+  "templates": [
+    {
+      "name": "电话号码检查",
+      "rule_type": "pattern",
+      "parameters": {
+        "pattern": "1[3-9]\\d{9}"
+      }
+    },
+    {
+      "name": "邮箱格式检查",
+      "rule_type": "pattern",
+      "parameters": {
+        "pattern": "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
+      }
+    }
+  ]
+}

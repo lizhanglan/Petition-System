@@ -24,6 +24,9 @@
         <el-menu-item index="/templates">
           <span>模板管理</span>
         </el-menu-item>
+        <el-menu-item index="/audit-logs">
+          <span>审计日志</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     

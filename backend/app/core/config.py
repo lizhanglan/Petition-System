@@ -73,6 +73,23 @@ class Settings(BaseSettings):
     def API_RETRY_DELAYS_LIST(self) -> List[int]:
         return [int(d) for d in self.API_RETRY_DELAYS.split(",")]
     
+    # API 限流配置
+    RATE_LIMIT_ENABLED: bool = True  # 使用自定义限流实现
+    RATE_LIMIT_GLOBAL: str = "100/minute"  # 全局限流：每分钟 100 次
+    RATE_LIMIT_USER: str = "50/minute"  # 用户级限流：每分钟 50 次
+    RATE_LIMIT_AI: str = "10/minute"  # AI 接口限流：每分钟 10 次
+    RATE_LIMIT_UPLOAD: str = "20/minute"  # 上传接口限流：每分钟 20 次
+    
+    # 降级功能配置
+    FALLBACK_ENABLED: bool = True  # 是否启用降级功能
+    HEALTH_CHECK_INTERVAL: int = 30  # 健康检查间隔（秒）
+    AI_HEALTH_TIMEOUT: int = 5  # AI 健康检查超时时间（秒）
+    FAILURE_THRESHOLD: int = 3  # 失败阈值（连续失败次数）
+    RECOVERY_THRESHOLD: int = 2  # 恢复阈值（连续成功次数）
+    LOCAL_VALIDATION_TIMEOUT: int = 3  # 本地验证超时时间（秒）
+    RULES_CONFIG_PATH: str = "backend/config/validation_rules.json"  # 规则配置文件路径
+    RULES_AUTO_RELOAD: bool = True  # 是否自动重载规则配置
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

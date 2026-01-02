@@ -110,8 +110,14 @@ class DeepSeekService:
         
         return await self.call_with_retry(messages, temperature=0.3)
     
-    async def generate_document(self, prompt: str, template_info: Dict[str, Any], context: list = None) -> Optional[str]:
-        """生成文书"""
+    async def generate_document(
+        self, 
+        prompt: str, 
+        template_info: Dict[str, Any], 
+        context: list = None,
+        file_context: str = None
+    ) -> Optional[str]:
+        """生成文书（支持多轮对话和文件引用）"""
         system_prompt = f"""你是信访文书生成专家，严格遵循《党政机关公文格式》规范。
 当前使用模板：{template_info.get('name', '未知模板')}
 模板类型：{template_info.get('document_type', '未知类型')}
@@ -119,13 +125,21 @@ class DeepSeekService:
 请根据用户需求生成符合规范的文书正文内容。注意：
 1. 仅生成正文内容，不包含模板固定格式部分
 2. 确保内容合规、语言规范、逻辑清晰
-3. 如发现需求中信息缺失或错误，在回复末尾说明"""
+3. 如发现需求中信息缺失或错误，在回复末尾说明
+4. 如果用户提供了参考文件，请结合参考文件内容生成"""
         
         messages = [{"role": "system", "content": system_prompt}]
         
-        # 添加历史对话上下文（最多10轮）
+        # 添加文件引用上下文
+        if file_context:
+            messages.append({
+                "role": "system",
+                "content": f"用户提供的参考文件内容：\n{file_context}"
+            })
+        
+        # 添加历史对话上下文（最多20条消息）
         if context:
-            messages.extend(context[-20:])  # 10轮对话 = 20条消息
+            messages.extend(context[-20:])
         
         messages.append({"role": "user", "content": prompt})
         

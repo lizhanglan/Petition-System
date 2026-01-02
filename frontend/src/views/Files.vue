@@ -4,17 +4,46 @@
       <template #header>
         <div class="card-header">
           <span>文件管理</span>
-          <el-upload
-            :before-upload="handleUpload"
-            :show-file-list="false"
-            accept=".pdf,.doc,.docx"
-          >
-            <el-button type="primary">上传文件</el-button>
-          </el-upload>
+          <div class="upload-buttons">
+            <el-upload
+              :before-upload="handleUpload"
+              :show-file-list="false"
+              accept=".pdf,.doc,.docx"
+            >
+              <el-button type="primary">上传文件</el-button>
+            </el-upload>
+            <el-upload
+              :before-upload="() => false"
+              :on-change="handleBatchSelect"
+              :show-file-list="false"
+              accept=".pdf,.doc,.docx"
+              multiple
+            >
+              <el-button type="success">批量上传</el-button>
+            </el-upload>
+          </div>
         </div>
       </template>
       
+      <!-- 批量上传进度 -->
+      <el-alert
+        v-if="batchUploading"
+        title="批量上传中..."
+        type="info"
+        :closable="false"
+        style="margin-bottom: 20px"
+      >
+        <el-progress
+          :percentage="uploadProgress"
+          :status="uploadProgress === 100 ? 'success' : undefined"
+        />
+        <p style="margin-top: 10px">
+          已上传: {{ uploadedCount }} / {{ totalCount }} 个文件
+        </p>
+      </el-alert>
+      
       <el-table :data="fileList" v-loading="loading">
+        <el-table-column type="selection" width="55" />
         <el-table-column prop="file_name" label="文件名" />
         <el-table-column prop="file_type" label="类型" width="100" />
         <el-table-column prop="file_size" label="大小" width="120">
@@ -52,13 +81,40 @@
         </el-empty>
       </div>
     </el-dialog>
+    
+    <!-- 批量上传结果对话框 -->
+    <el-dialog v-model="batchResultVisible" title="批量上传结果" width="600px">
+      <el-descriptions :column="3" border>
+        <el-descriptions-item label="总数">{{ batchResult.total_count }}</el-descriptions-item>
+        <el-descriptions-item label="成功">
+          <el-tag type="success">{{ batchResult.success_count }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="失败">
+          <el-tag type="danger">{{ batchResult.failed_count }}</el-tag>
+        </el-descriptions-item>
+      </el-descriptions>
+      
+      <el-divider />
+      
+      <el-table :data="batchResult.results" max-height="400">
+        <el-table-column prop="file_name" label="文件名" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.success ? 'success' : 'danger'">
+              {{ row.success ? '成功' : '失败' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="error" label="错误信息" />
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { uploadFile, getFileList, getFilePreview, deleteFile } from '@/api/files'
+import { uploadFile, batchUploadFiles, getFileList, getFilePreview, deleteFile } from '@/api/files'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
@@ -69,10 +125,24 @@ const previewUrl = ref('')
 const previewError = ref(false)
 const currentFile = ref<any>(null)
 
+// 批量上传相关
+const batchUploading = ref(false)
+const uploadProgress = ref(0)
+const uploadedCount = ref(0)
+const totalCount = ref(0)
+const batchResultVisible = ref(false)
+const batchResult = ref<any>({
+  total_count: 0,
+  success_count: 0,
+  failed_count: 0,
+  results: []
+})
+
 const loadFiles = async () => {
   loading.value = true
   try {
-    fileList.value = await getFileList()
+    const data: any = await getFileList()
+    fileList.value = data
   } catch (error) {
     console.error(error)
   } finally {
@@ -94,11 +164,54 @@ const handleUpload = async (file: File) => {
   return false
 }
 
+const handleBatchSelect = async (file: any, fileList: any[]) => {
+  if (fileList.length === 0) return
+  
+  // 提取 File 对象
+  const files = fileList.map(f => f.raw).filter(f => f)
+  
+  if (files.length === 0) {
+    ElMessage.warning('请选择文件')
+    return
+  }
+  
+  // 开始批量上传
+  batchUploading.value = true
+  uploadProgress.value = 0
+  uploadedCount.value = 0
+  totalCount.value = files.length
+  
+  try {
+    const result: any = await batchUploadFiles(files)
+    
+    uploadProgress.value = 100
+    uploadedCount.value = result.success_count
+    batchResult.value = result
+    
+    if (result.success_count > 0) {
+      ElMessage.success(`成功上传 ${result.success_count} 个文件`)
+      await loadFiles()
+    }
+    
+    if (result.failed_count > 0) {
+      ElMessage.warning(`${result.failed_count} 个文件上传失败`)
+      batchResultVisible.value = true
+    }
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('批量上传失败')
+  } finally {
+    setTimeout(() => {
+      batchUploading.value = false
+    }, 1000)
+  }
+}
+
 const handlePreview = async (row: any) => {
   try {
     currentFile.value = row
     previewError.value = false
-    const data = await getFilePreview(row.id)
+    const data: any = await getFilePreview(row.id)
     
     if (!data.preview_url) {
       previewError.value = true
@@ -186,6 +299,11 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.upload-buttons {
+  display: flex;
+  gap: 10px;
 }
 
 .preview-error {
