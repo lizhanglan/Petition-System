@@ -1,0 +1,29 @@
+name: Deploy to Aliyun
+
+on:
+  push:
+    branches:
+      - main  # 如果你的主分支叫 master，请改为 master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd ~/lizhanglan/petition_system
+            git pull origin main
+            # 构建变动的镜像并启动
+            docker-compose up -d --build
+            # 自动同步数据库表结构
+            docker exec petition-backend python manual_create_tables.py
+            # 清理虚悬镜像释放磁盘
+            docker image prune -f
