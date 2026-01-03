@@ -77,12 +77,13 @@ const initEditor = async () => {
     await loadOnlyOfficeScript()
     
     // 获取编辑器配置
-    const config = await request.post('/onlyoffice/config', {
+    const response = await request.post('/onlyoffice/config', {
       file_id: props.fileId,
       document_id: props.documentId,
       mode: props.mode
     })
     
+    const config = response.data
     console.log('[OnlyOffice] Editor config:', config)
     
     // 添加事件处理

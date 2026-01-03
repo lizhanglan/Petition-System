@@ -105,14 +105,20 @@ async def get_editor_config(
 @router.get("/download/file/{file_id}")
 async def download_file_for_onlyoffice(
     file_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """
     文件下载代理端点（供ONLYOFFICE访问）
     ONLYOFFICE服务器通过此端点下载文件
+    注意：此端点不需要认证，因为ONLYOFFICE服务器无法提供用户token
     """
     
-    print(f"[OnlyOffice] Download request for file {file_id}")
+    print(f"[OnlyOffice] ========== Download Request ==========")
+    print(f"[OnlyOffice] File ID: {file_id}")
+    print(f"[OnlyOffice] Client IP: {request.client.host if request.client else 'unknown'}")
+    print(f"[OnlyOffice] User-Agent: {request.headers.get('user-agent', 'unknown')}")
+    print(f"[OnlyOffice] Headers: {dict(request.headers)}")
     
     # 查询文件
     result = await db.execute(
@@ -121,39 +127,72 @@ async def download_file_for_onlyoffice(
     file = result.scalar_one_or_none()
     
     if not file:
+        print(f"[OnlyOffice] ERROR: File {file_id} not found in database")
         raise HTTPException(status_code=404, detail="文件不存在")
+    
+    print(f"[OnlyOffice] File found: {file.file_name}")
+    print(f"[OnlyOffice] Storage path: {file.storage_path}")
+    print(f"[OnlyOffice] File type: {file.file_type}")
+    
+    # 根据文件类型确定MIME类型
+    mime_types = {
+        'pdf': 'application/pdf',
+        'doc': 'application/msword',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xls': 'application/vnd.ms-excel',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'ppt': 'application/vnd.ms-powerpoint',
+        'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    }
+    content_type = mime_types.get(file.file_type.lower(), 'application/octet-stream')
+    print(f"[OnlyOffice] Content type: {content_type}")
     
     try:
         # 从MinIO下载文件
+        print(f"[OnlyOffice] Downloading from MinIO...")
         file_data = await minio_client.download_file(file.storage_path)
         
-        print(f"[OnlyOffice] File downloaded from MinIO, size: {len(file_data)} bytes")
+        print(f"[OnlyOffice] SUCCESS: File downloaded from MinIO, size: {len(file_data)} bytes")
+        
+        # 对文件名进行URL编码以支持中文
+        from urllib.parse import quote
+        encoded_filename = quote(file.file_name)
         
         # 返回文件流
         return StreamingResponse(
             io.BytesIO(file_data),
-            media_type=file.content_type,
+            media_type=content_type,
             headers={
-                "Content-Disposition": f'attachment; filename="{file.file_name}"',
-                "Content-Length": str(len(file_data))
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                "Content-Length": str(len(file_data)),
+                "Access-Control-Allow-Origin": "*",  # 允许跨域
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
             }
         )
     except Exception as e:
-        print(f"[OnlyOffice] Error downloading file: {e}")
+        print(f"[OnlyOffice] ERROR downloading file: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"文件下载失败: {str(e)}")
 
 
 @router.get("/download/document/{document_id}")
 async def download_document_for_onlyoffice(
     document_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """
     文书下载代理端点（供ONLYOFFICE访问）
     ONLYOFFICE服务器通过此端点下载文书
+    注意：此端点不需要认证，因为ONLYOFFICE服务器无法提供用户token
     """
     
-    print(f"[OnlyOffice] Download request for document {document_id}")
+    print(f"[OnlyOffice] ========== Download Request ==========")
+    print(f"[OnlyOffice] Document ID: {document_id}")
+    print(f"[OnlyOffice] Client IP: {request.client.host if request.client else 'unknown'}")
+    print(f"[OnlyOffice] User-Agent: {request.headers.get('user-agent', 'unknown')}")
     
     # 查询文书
     result = await db.execute(
@@ -162,25 +201,39 @@ async def download_document_for_onlyoffice(
     document = result.scalar_one_or_none()
     
     if not document:
+        print(f"[OnlyOffice] ERROR: Document {document_id} not found in database")
         raise HTTPException(status_code=404, detail="文书不存在")
+    
+    print(f"[OnlyOffice] Document found: {document.title}")
+    print(f"[OnlyOffice] Storage path: {document.file_path}")
     
     try:
         # 从MinIO下载文书
+        print(f"[OnlyOffice] Downloading from MinIO...")
         file_data = await minio_client.download_file(document.file_path)
         
-        print(f"[OnlyOffice] Document downloaded from MinIO, size: {len(file_data)} bytes")
+        print(f"[OnlyOffice] SUCCESS: Document downloaded from MinIO, size: {len(file_data)} bytes")
+        
+        # 对文件名进行URL编码以支持中文
+        from urllib.parse import quote
+        encoded_filename = quote(f"{document.title}.docx")
         
         # 返回文件流
         return StreamingResponse(
             io.BytesIO(file_data),
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             headers={
-                "Content-Disposition": f'attachment; filename="{document.title}.docx"',
-                "Content-Length": str(len(file_data))
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                "Content-Length": str(len(file_data)),
+                "Access-Control-Allow-Origin": "*",  # 允许跨域
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
             }
         )
     except Exception as e:
-        print(f"[OnlyOffice] Error downloading document: {e}")
+        print(f"[OnlyOffice] ERROR downloading document: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"文书下载失败: {str(e)}")
 
 
