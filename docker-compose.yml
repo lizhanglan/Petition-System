@@ -86,7 +86,7 @@ services:
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
-      MINIO_BUCKET_NAME: ${MINIO_BUCKET:-petition-files}
+      MINIO_BUCKET: ${MINIO_BUCKET:-petition-files}
       MINIO_SECURE: "false"
       
       # ========== JWT 配置 - 修复前缀JWT_ + 替换安全密钥 ✅ ==========
@@ -118,7 +118,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
         condition: service_healthy
     networks:
       - petition-network

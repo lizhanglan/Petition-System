@@ -390,14 +390,14 @@ async def generate_document(
     
     # 调用 AI 生成
     print(f"[Generate] Calling AI with prompt length: {len(request.prompt)}")
-    generated_content = await deepseek_service.generate_document(
+    ai_response = await deepseek_service.generate_document(
         request.prompt,
         template_info,
         context,
         file_context=file_context if file_context else None
     )
     
-    if not generated_content:
+    if not ai_response:
         # 添加失败消息到对话历史
         conversation_service.add_message(
             user_id=current_user.id,
@@ -407,22 +407,63 @@ async def generate_document(
         )
         raise HTTPException(status_code=500, detail="AI 生成失败，请稍后重试")
     
-    print(f"[Generate] AI generation completed, content length: {len(generated_content)}")
+    print(f"[Generate] AI response received, length: {len(ai_response)}")
     
-    # 添加 AI 回复到对话历史
+    # 解析AI返回的JSON格式
+    chat_message = ""
+    document_content = ""
+    summary = ""
+    suggestions = []
+    
+    try:
+        ai_data = json.loads(ai_response)
+        print(f"[Generate] JSON parsed successfully")
+        
+        # 提取各个字段
+        chat_message = ai_data.get("chat_message", "")
+        document_content = ai_data.get("document_content", "")
+        summary = ai_data.get("summary", "")
+        suggestions = ai_data.get("suggestions", [])
+        
+        # 确保document_content不为空
+        if not document_content:
+            print(f"[Generate] Warning: document_content is empty, using full response")
+            document_content = ai_response
+            chat_message = "已生成文书内容"
+        
+        print(f"[Generate] Parsed - chat_message: {len(chat_message)} chars, document_content: {len(document_content)} chars")
+        
+    except json.JSONDecodeError as e:
+        print(f"[Generate] JSON解析失败: {e}")
+        print(f"[Generate] AI返回内容: {ai_response[:500]}...")
+        
+        # JSON解析失败，使用整个返回作为文档内容
+        document_content = ai_response
+        chat_message = f"已生成文书，共 {len(ai_response)} 字。"
+        
+    except Exception as e:
+        print(f"[Generate] 数据处理失败: {e}")
+        document_content = ai_response if isinstance(ai_response, str) else ""
+        chat_message = "文书已生成"
+    
+    # 添加 AI 回复到对话历史（使用chat_message）
     conversation_service.add_message(
         user_id=current_user.id,
         role="assistant",
-        content=f"已生成文书，共 {len(generated_content)} 字。",
+        content=chat_message,
         session_id=request.session_id,
-        metadata={"content_length": len(generated_content)}
+        metadata={
+            "content_length": len(document_content),
+            "summary": summary,
+            "suggestions": suggestions
+        }
     )
     
     # 解析生成的内容，尝试提取结构化字段
-    structured_content = _parse_generated_content(generated_content, template.fields or {})
+    structured_content = _parse_generated_content(document_content, template.fields or {})
     
     # 填充模板
-    final_content = _fill_template(template.content_template, structured_content, generated_content)
+    final_content = _fill_template(template.content_template, structured_content, document_content)
     
     # 创建文档记录
     document = Document(
@@ -513,7 +554,11 @@ async def generate_document(
         content=document.content,
         document_type=document.document_type,
         status=document.status,
-        ai_annotations=document.ai_annotations,
+        ai_annotations={
+            "chat_message": chat_message,
+            "summary": summary,
+            "suggestions": suggestions
+        },
         preview_url=preview_url,
         created_at=document.created_at
     )

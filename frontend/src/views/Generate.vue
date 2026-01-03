@@ -285,15 +285,49 @@ const handleSend = async () => {
     // 获取文档预览URL
     if (result.preview_url) {
       previewUrl.value = result.preview_url
-    } else if (result.id) {
-      // 如果没有返回preview_url，使用文档ID获取预览
-      previewUrl.value = `http://localhost:8000/api/v1/documents/${result.id}/preview`
+      console.log('[Generate] Preview URL:', result.preview_url)
+    } else {
+      console.warn('[Generate] No preview_url in response, trying to fetch...')
+      // 如果没有返回preview_url，尝试获取预览
+      try {
+        const previewResponse: any = await fetch(`/api/v1/documents/${result.id}/preview`)
+        const previewData = await previewResponse.json()
+        if (previewData.preview_url) {
+          previewUrl.value = previewData.preview_url
+          console.log('[Generate] Fetched preview URL:', previewData.preview_url)
+        }
+      } catch (error) {
+        console.error('[Generate] Failed to fetch preview:', error)
+      }
+    }
+    
+    // 提取AI返回的chat_message和suggestions
+    let chatMessage = `文书已生成（${result.content.length} 字），请在右侧查看预览。`
+    
+    if (result.ai_annotations) {
+      // 使用AI返回的chat_message
+      if (result.ai_annotations.chat_message) {
+        chatMessage = result.ai_annotations.chat_message
+      }
+      
+      // 如果有摘要，添加到消息中
+      if (result.ai_annotations.summary) {
+        chatMessage += `\n\n📝 摘要：${result.ai_annotations.summary}`
+      }
+      
+      // 如果有建议，添加到消息中
+      if (result.ai_annotations.suggestions && result.ai_annotations.suggestions.length > 0) {
+        chatMessage += '\n\n💡 建议：'
+        result.ai_annotations.suggestions.forEach((suggestion: string, index: number) => {
+          chatMessage += `\n${index + 1}. ${suggestion}`
+        })
+      }
     }
     
     // 添加 AI 回复
     messages.value.push({
       role: 'assistant',
-      content: `文书已生成（${result.content.length} 字），请在右侧查看预览。`,
+      content: chatMessage,
       timestamp: new Date().toISOString()
     })
     
@@ -476,6 +510,7 @@ onMounted(() => {
   border-radius: 12px;
   word-wrap: break-word;
   line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .message.user .message-text {
