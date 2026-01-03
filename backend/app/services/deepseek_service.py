@@ -92,23 +92,50 @@ class DeepSeekService:
         print(f"All {self.retry_times} API call attempts failed. Last error: [{error_type}] {error_msg}")
         return None
     
-    async def review_document(self, content: str) -> Optional[Dict[str, Any]]:
-        """文档研判"""
+    async def review_document(self, content: str) -> Optional[str]:
+        """文档研判 - 返回JSON字符串"""
         system_prompt = """你是信访文书审核专家，严格遵循《党政机关公文格式》《党政机关公文处理工作条例》《信访业务术语（2023年版）》。
+
 请对文书进行全面审核，包括：
 1. 内容合规性：错别字、术语规范、语义准确、诉求完整、法规真实性
 2. 格式规范性：文号、排版、页眉页脚、落款格式
 
-返回 JSON 格式的审核结果，包含：
-- errors: 错误列表，每个错误包含 type(content/format), level(character/sentence/paragraph), position, description, suggestion, reference
-- summary: 总体评价"""
+**重要：必须严格按照以下JSON格式返回，不要添加任何其他文字：**
+
+{
+  "summary": "总体评价文字，简明扼要地说明文档的整体质量和主要问题",
+  "errors": [
+    {
+      "description": "问题的详细描述",
+      "suggestion": "具体的修改建议",
+      "reference": "相关的法律法规依据（可选）"
+    }
+  ]
+}
+
+如果没有发现问题，errors数组为空即可。"""
         
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"请审核以下文书：\n\n{content}"}
+            {"role": "user", "content": f"请审核以下文书：\n\n{content[:3000]}"}  # 限制长度避免超时
         ]
         
-        return await self.call_with_retry(messages, temperature=0.3)
+        result = await self.call_with_retry(messages, temperature=0.3)
+        
+        if result:
+            # 尝试清理可能的markdown代码块标记
+            result = result.strip()
+            if result.startswith('```json'):
+                result = result[7:]
+            if result.startswith('```'):
+                result = result[3:]
+            if result.endswith('```'):
+                result = result[:-3]
+            result = result.strip()
+            
+            print(f"[DeepSeek] Cleaned result: {result[:200]}...")
+        
+        return result
     
     async def generate_document(
         self, 

@@ -50,32 +50,40 @@
             </el-button>
             
             <div v-if="reviewResult">
-              <el-alert
-                :title="`发现 ${reviewResult.errors.length} 个问题`"
-                :type="reviewResult.errors.length > 0 ? 'warning' : 'success'"
-                :closable="false"
-                style="margin-bottom: 20px;"
-              />
-              
-              <div class="summary">
+              <!-- 总体评价 -->
+              <div class="summary-section">
                 <h4>总体评价</h4>
-                <p>{{ reviewResult.summary }}</p>
+                <div class="summary-content">
+                  {{ reviewResult.summary }}
+                </div>
               </div>
               
-              <div v-if="reviewResult.errors.length > 0" class="errors">
-                <h4>问题列表</h4>
-                <el-collapse>
-                  <el-collapse-item
+              <!-- 问题详情 -->
+              <div v-if="reviewResult.errors && reviewResult.errors.length > 0" class="problems-section">
+                <h4>发现 {{ reviewResult.errors.length }} 个问题</h4>
+                <div class="problem-list">
+                  <div
                     v-for="(error, index) in reviewResult.errors"
                     :key="index"
-                    :title="`${index + 1}. ${error.description}`"
+                    class="problem-item"
                   >
-                    <p><strong>类型：</strong>{{ getErrorType(error.type) }}</p>
-                    <p><strong>级别：</strong>{{ getErrorLevel(error.level) }}</p>
-                    <p><strong>建议：</strong>{{ error.suggestion }}</p>
-                    <p v-if="error.reference"><strong>依据：</strong>{{ error.reference }}</p>
-                  </el-collapse-item>
-                </el-collapse>
+                    <div class="problem-number">{{ index + 1 }}.</div>
+                    <div class="problem-content">
+                      <p class="problem-text">{{ error.description || error }}</p>
+                      <p v-if="error.suggestion" class="suggestion-text">
+                        <span class="label">建议：</span>{{ error.suggestion }}
+                      </p>
+                      <p v-if="error.reference" class="reference-text">
+                        <span class="label">依据：</span>{{ error.reference }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- 无问题状态 -->
+              <div v-else class="no-problems">
+                <p>✓ 未发现明显问题，文档质量良好</p>
               </div>
             </div>
           </div>
@@ -109,7 +117,11 @@ const fileUrl = ref('')
 // 捕获 iframe 内部的错误，避免显示在控制台
 const handleWindowError = (event: ErrorEvent) => {
   // 忽略来自华为云预览服务的错误
-  if (event.message && event.message.includes('split is not a function')) {
+  if (event.message && (
+    event.message.includes('split is not a function') ||
+    event.message.includes('Cannot read') ||
+    event.message.includes('view.chigua.ren')
+  )) {
     event.preventDefault()
     return false
   }
@@ -118,7 +130,12 @@ const handleWindowError = (event: ErrorEvent) => {
 // 捕获 postMessage 错误
 const handleMessageError = (event: MessageEvent) => {
   // 忽略华为云预览服务的消息错误
-  console.debug('Preview service message:', event.data)
+  if (event.data && typeof event.data === 'object') {
+    // 只在开发环境输出调试信息
+    if (import.meta.env.DEV) {
+      console.debug('Preview service message:', event.data)
+    }
+  }
 }
 
 const loadPreview = async () => {
@@ -193,15 +210,23 @@ const handleReview = async () => {
 }
 
 const getErrorType = (type: string) => {
-  const map: any = {
+  const map: Record<string, string> = {
     content: '内容错误',
-    format: '格式错误'
+    format: '格式错误',
+    logic: '逻辑错误',
+    grammar: '语法错误',
+    style: '文风问题',
+    compliance: '合规问题'
   }
   return map[type] || type
 }
 
 const getErrorLevel = (level: string) => {
-  const map: any = {
+  const map: Record<string, string> = {
+    critical: '严重',
+    high: '重要',
+    medium: '一般',
+    low: '轻微',
     character: '字符级',
     sentence: '句子级',
     paragraph: '段落级'
@@ -273,23 +298,116 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-.summary,
-.errors {
+/* 总体评价区域 */
+.summary-section {
   margin-top: 20px;
-  padding: 15px;
+  padding: 20px;
   background-color: white;
-  border-radius: 4px;
+  border-radius: 8px;
+  border-left: 4px solid #409eff;
 }
 
-.summary h4,
-.errors h4 {
-  margin-bottom: 10px;
-  color: #333;
+.summary-section h4 {
+  margin: 0 0 15px 0;
+  color: #303133;
+  font-size: 16px;
+  font-weight: 600;
 }
 
-.summary p {
+.summary-content {
+  line-height: 1.8;
+  color: #606266;
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* 问题列表区域 */
+.problems-section {
+  margin-top: 20px;
+  padding: 20px;
+  background-color: white;
+  border-radius: 8px;
+  border-left: 4px solid #e6a23c;
+}
+
+.problems-section h4 {
+  margin: 0 0 20px 0;
+  color: #303133;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.problem-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.problem-item {
+  display: flex;
+  gap: 12px;
+  padding: 15px;
+  background-color: #f5f7fa;
+  border-radius: 6px;
+  line-height: 1.8;
+}
+
+.problem-number {
+  flex-shrink: 0;
+  color: #909399;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.problem-content {
+  flex: 1;
+}
+
+.problem-text {
+  margin: 0 0 10px 0;
+  color: #303133;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.suggestion-text,
+.reference-text {
+  margin: 8px 0 0 0;
+  color: #606266;
+  font-size: 13px;
   line-height: 1.6;
-  color: #666;
+}
+
+.suggestion-text {
+  color: #67c23a;
+}
+
+.reference-text {
+  color: #909399;
+  font-style: italic;
+}
+
+.label {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+/* 无问题状态 */
+.no-problems {
+  margin-top: 20px;
+  padding: 40px 20px;
+  background-color: white;
+  border-radius: 8px;
+  text-align: center;
+  border-left: 4px solid #67c23a;
+}
+
+.no-problems p {
+  margin: 0;
+  color: #67c23a;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .errors {

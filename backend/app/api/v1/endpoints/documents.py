@@ -164,12 +164,41 @@ async def review_document(
                     )
             else:
                 # 解析 AI 返回结果
+                print(f"[Review] Parsing AI result...")
                 try:
                     review_data = json.loads(review_result)
-                except:
+                    print(f"[Review] JSON parsed successfully")
+                    
+                    # 确保数据结构正确
+                    if not isinstance(review_data, dict):
+                        raise ValueError("AI返回的不是有效的JSON对象")
+                    
+                    if "errors" not in review_data:
+                        review_data["errors"] = []
+                    
+                    if "summary" not in review_data:
+                        review_data["summary"] = "研判完成"
+                    
+                    # 确保errors是列表
+                    if not isinstance(review_data["errors"], list):
+                        review_data["errors"] = []
+                    
+                    print(f"[Review] Parsed data: summary={review_data['summary'][:50]}..., errors_count={len(review_data['errors'])}")
+                    
+                except json.JSONDecodeError as e:
+                    print(f"[Review] JSON解析失败: {e}")
+                    print(f"[Review] AI返回内容: {review_result[:500]}...")
+                    
+                    # JSON解析失败，将整个返回作为summary
                     review_data = {
                         "errors": [],
                         "summary": review_result
+                    }
+                except Exception as e:
+                    print(f"[Review] 数据处理失败: {e}")
+                    review_data = {
+                        "errors": [],
+                        "summary": review_result if isinstance(review_result, str) else "研判完成"
                     }
         
         except Exception as e:
