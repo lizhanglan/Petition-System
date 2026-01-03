@@ -16,6 +16,13 @@ class OnlyOfficeService:
         self.callback_url = settings.ONLYOFFICE_CALLBACK_URL
         self.backend_public_url = settings.BACKEND_PUBLIC_URL
         self.jwt_enabled = settings.ONLYOFFICE_JWT_ENABLED
+        
+        # 调试日志
+        print(f"[OnlyOfficeService] Initialized with:")
+        print(f"  - server_url: {self.server_url}")
+        print(f"  - callback_url: {self.callback_url}")
+        print(f"  - backend_public_url: {self.backend_public_url}")
+        print(f"  - jwt_enabled: {self.jwt_enabled}")
     
     def generate_document_key(self, file_id: int, updated_at: datetime) -> str:
         """生成文档唯一key（用于缓存和版本控制）"""
@@ -75,6 +82,10 @@ class OnlyOfficeService:
         
         # 使用后端代理URL（ONLYOFFICE通过后端下载文件）
         file_url = f"{self.backend_public_url}/api/v1/onlyoffice/download/file/{file_id}"
+        
+        print(f"[OnlyOfficeService] Generated file URL: {file_url}")
+        print(f"  - backend_public_url: {self.backend_public_url}")
+        print(f"  - file_id: {file_id}")
         
         # 配置（无JWT版本，更简单）
         config = {
@@ -154,6 +165,10 @@ class OnlyOfficeService:
         
         # 使用后端代理URL（ONLYOFFICE通过后端下载文档）
         file_url = f"{self.backend_public_url}/api/v1/onlyoffice/download/document/{document_id}"
+        
+        print(f"[OnlyOfficeService] Generated document URL: {file_url}")
+        print(f"  - backend_public_url: {self.backend_public_url}")
+        print(f"  - document_id: {document_id}")
         
         # 配置（无JWT版本）
         config = {
