@@ -11,7 +11,7 @@ from app.models.file import File
 from app.models.audit_log import AuditLog
 from app.api.v1.endpoints.auth import get_current_user
 from app.core.minio_client import minio_client
-from app.services.office_preview_service import office_preview_service
+from app.services.preview_service_selector import preview_service_selector
 from app.core.config import settings
 from pydantic import BaseModel
 
@@ -86,9 +86,20 @@ async def upload_file(
     await db.commit()
     await db.refresh(db_file)
     
-    # 获取预览 URL
+    # 获取预览 URL（优先使用WPS服务）
     file_url = minio_client.get_file_url(storage_path)
-    preview_url = await office_preview_service.get_preview_url(file_url) if file_url else ""
+    preview_url = ""
+    
+    if file_url:
+        preview_result = await preview_service_selector.get_preview_url(
+            file_url=file_url,
+            file_name=file.filename,
+            user_id=str(current_user.id),
+            permission="read"
+        )
+        if preview_result and preview_result.get("preview_url"):
+            preview_url = preview_result["preview_url"]
+            print(f"[Upload] Preview service: {preview_result.get('service_type')}")
     
     return FileResponse(
         id=db_file.id,
@@ -267,39 +278,23 @@ async def get_file_preview(
         if not file_url:
             raise HTTPException(status_code=500, detail="无法获取文件 URL")
         
-        preview_url = None
-        preview_type = "direct"  # direct, huawei, unsupported
+        # 使用预览服务选择器（优先WPS，降级到华为云）
+        preview_result = await preview_service_selector.get_preview_url(
+            file_url=file_url,
+            file_name=file.file_name,
+            user_id=str(current_user.id),
+            permission="read"
+        )
         
-        # 对于 PDF 和 Word 文档，优先尝试华为云服务
-        if file.file_type in ['pdf', 'doc', 'docx']:
-            print(f"[Preview] 尝试使用华为云预览服务: {file.file_type}")
-            preview_url = await office_preview_service.get_preview_url(file_url)
-            
-            if preview_url:
-                preview_type = "huawei"
-                print(f"[Preview] 华为云预览成功")
-            else:
-                print(f"[Preview] 华为云预览失败，使用降级方案")
-                # 华为云失败，使用降级方案
-                if file.file_type == 'pdf':
-                    # PDF 直接返回文件 URL，浏览器可以直接预览
-                    preview_url = file_url
-                    preview_type = "direct"
-                    print(f"[Preview] PDF 使用浏览器直接预览")
-                else:
-                    # Word 文档不支持预览
-                    preview_url = None
-                    preview_type = "unsupported"
-                    print(f"[Preview] Word 文档暂不支持预览")
-        else:
-            # 其他格式不支持预览
-            preview_url = None
-            preview_type = "unsupported"
+        preview_url = preview_result.get("preview_url") if preview_result else None
+        service_type = preview_result.get("service_type", "unsupported") if preview_result else "unsupported"
+        
+        print(f"[Preview] Service: {service_type}, URL: {preview_url}")
         
         return {
             "preview_url": preview_url,
             "file_url": file_url,
-            "preview_type": preview_type,
+            "preview_type": service_type,  # wps, huawei, direct, unsupported
             "file_type": file.file_type,
             "file_name": file.file_name
         }

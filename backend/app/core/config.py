@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     OFFICE_MCP_APP_CODE: str
     OFFICE_X_APIG_APP_CODE: str
     
+    # WPS开放平台配置（用于文档预览和编辑）
+    WPS_APP_ID: str = ""
+    WPS_APP_SECRET: str = ""
+    WPS_API_BASE: str = "https://open.wps.cn"
+    WPS_ENABLED: bool = False  # 是否启用WPS服务
+    
     # PostgreSQL
     POSTGRES_HOST: str
     POSTGRES_PORT: int

@@ -442,9 +442,9 @@ async def generate_document(
     
     print(f"[Generate] Document created with ID: {document.id}, version 1 created")
     
-    # 生成预览URL（使用华为云Office预览服务）
+    # 生成预览URL（优先使用WPS服务，降级到华为云）
     from app.core.minio_client import minio_client
-    from app.services.office_preview_service import office_preview_service
+    from app.services.preview_service_selector import preview_service_selector
     
     # 先将文档内容保存为临时文件到MinIO
     temp_filename = f"temp_preview/{current_user.id}/{document.id}.docx"
@@ -464,11 +464,19 @@ async def generate_document(
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     
-    # 获取预览URL
+    # 获取预览URL（优先WPS，降级到华为云）
     file_url = minio_client.get_file_url(temp_filename, expires=3600, inline=True)
-    preview_url = await office_preview_service.get_preview_url(file_url)
+    preview_result = await preview_service_selector.get_preview_url(
+        file_url=file_url,
+        file_name=f"{document.title}.docx",
+        user_id=str(current_user.id),
+        permission="read"
+    )
     
-    print(f"[Generate] Preview URL generated: {preview_url}")
+    preview_url = preview_result.get("preview_url") if preview_result else None
+    service_type = preview_result.get("service_type", "unsupported") if preview_result else "unsupported"
+    
+    print(f"[Generate] Preview service: {service_type}, URL: {preview_url}")
     
     return DocumentResponse(
         id=document.id,
@@ -989,7 +997,7 @@ async def get_document_preview(
     
     try:
         # 生成DOCX文件
-        from app.services.office_preview_service import office_preview_service
+        from app.services.preview_service_selector import preview_service_selector
         
         docx_bytes = await document_export_service.export_to_docx(
             content=document.content,
@@ -1005,15 +1013,24 @@ async def get_document_preview(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
         
-        # 获取预览URL
+        # 获取预览URL（优先WPS，降级到华为云）
         file_url = minio_client.get_file_url(temp_filename, expires=3600, inline=True)
-        preview_url = await office_preview_service.get_preview_url(file_url)
+        preview_result = await preview_service_selector.get_preview_url(
+            file_url=file_url,
+            file_name=f"{document.title}.docx",
+            user_id=str(current_user.id),
+            permission="read"
+        )
         
-        print(f"[Preview] Preview URL generated: {preview_url}")
+        preview_url = preview_result.get("preview_url") if preview_result else None
+        service_type = preview_result.get("service_type", "unsupported") if preview_result else "unsupported"
+        
+        print(f"[Preview] Service: {service_type}, URL: {preview_url}")
         
         return {
             "preview_url": preview_url,
             "file_url": file_url,
+            "service_type": service_type,
             "document_id": document.id
         }
     except Exception as e:
