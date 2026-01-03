@@ -105,6 +105,13 @@ class Settings(BaseSettings):
         config_path = backend_dir / "config" / "validation_rules.json"
         return str(config_path)
     
+    # ONLYOFFICE配置（无JWT版本）
+    ONLYOFFICE_ENABLED: bool = True
+    ONLYOFFICE_SERVER_URL: str = "http://101.37.24.171:9090"
+    ONLYOFFICE_JWT_ENABLED: bool = False
+    ONLYOFFICE_CALLBACK_URL: str = ""  # 回调URL，如：http://your-backend/api/v1/onlyoffice/callback
+    BACKEND_PUBLIC_URL: str = ""  # 后端公网地址，用于ONLYOFFICE访问代理端点
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

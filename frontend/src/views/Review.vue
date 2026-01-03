@@ -15,7 +15,18 @@
         <el-col :span="16">
           <div class="preview-area">
             <h3>文件预览</h3>
-            <div v-if="previewUrl && !previewError">
+            
+            <!-- ONLYOFFICE预览 -->
+            <OnlyOfficeEditor
+              v-if="previewType === 'onlyoffice' && fileId && !previewError"
+              :file-id="fileId"
+              mode="view"
+              height="calc(100vh - 280px)"
+              @error="handlePreviewError"
+            />
+            
+            <!-- 其他预览方式 -->
+            <div v-else-if="previewUrl && !previewError">
               <iframe 
                 :src="previewUrl" 
                 class="preview-iframe" 
@@ -23,6 +34,8 @@
                 sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
               />
             </div>
+            
+            <!-- 错误提示 -->
             <div v-else-if="previewError" class="preview-error">
               <el-empty :description="getPreviewErrorMessage()">
                 <el-space>
@@ -37,6 +50,8 @@
                 </el-space>
               </el-empty>
             </div>
+            
+            <!-- 加载中 -->
             <el-empty v-else description="加载中..." />
           </div>
         </el-col>
@@ -101,6 +116,7 @@ import { getFilePreview } from '@/api/files'
 import { reviewDocument } from '@/api/documents'
 import { ElMessage } from 'element-plus'
 import FallbackNotice from '@/components/FallbackNotice.vue'
+import OnlyOfficeEditor from '@/components/OnlyOfficeEditor.vue'
 
 const route = useRoute()
 const fileId = Number(route.params.fileId)
@@ -139,9 +155,21 @@ const handleMessageError = (event: MessageEvent) => {
 }
 
 const loadPreview = async () => {
+  // 验证fileId
+  if (!fileId || isNaN(fileId)) {
+    previewError.value = true
+    ElMessage.error('无效的文件ID，请从文件列表重新进入')
+    console.error('Invalid fileId:', fileId, 'from route params:', route.params.fileId)
+    return
+  }
+  
   loading.value = true
+  console.log('[Review] Loading preview for file:', fileId)
+  
   try {
-    const data = await getFilePreview(fileId)
+    const data: any = await getFilePreview(fileId)
+    console.log('[Review] Preview data received:', data)
+    
     fileUrl.value = data.file_url || ''
     fileName.value = data.file_name || ''
     fileType.value = data.file_type || ''
@@ -160,19 +188,27 @@ const loadPreview = async () => {
         ElMessage.warning('预览服务暂时不可用，但仍可进行研判')
       }
     } else {
-      previewUrl.value = data.preview_url
-      
-      // 设置预览超时检测
-      setTimeout(() => {
-        if (!previewError.value && previewUrl.value) {
-          console.log('Preview loaded successfully')
-        }
-      }, 5000)
+      // 检查是否是ONLYOFFICE标记
+      if (data.preview_url === 'use_onlyoffice_component') {
+        console.log('[Review] ONLYOFFICE preview detected')
+        previewType.value = 'onlyoffice'
+      } else {
+        previewUrl.value = data.preview_url
+        console.log('[Review] Preview URL set:', previewUrl.value)
+      }
     }
-  } catch (error) {
-    console.error(error)
+  } catch (error: any) {
+    console.error('[Review] Load preview error:', error)
     previewError.value = true
-    ElMessage.error('加载预览失败')
+    
+    // 更友好的错误提示
+    if (error.response?.status === 404) {
+      ElMessage.error('文件不存在或已被删除')
+    } else if (error.response?.status === 422) {
+      ElMessage.error('文件ID格式错误，请从文件列表重新进入')
+    } else {
+      ElMessage.error('加载预览失败: ' + (error.response?.data?.detail || error.message))
+    }
   } finally {
     loading.value = false
   }
@@ -195,7 +231,8 @@ const handleReview = async () => {
   reviewing.value = true
   try {
     ElMessage.info('正在进行 AI 研判，这可能需要 1-2 分钟，请耐心等待...')
-    reviewResult.value = await reviewDocument(fileId)
+    const result: any = await reviewDocument(fileId)
+    reviewResult.value = result
     ElMessage.success('研判完成')
   } catch (error: any) {
     console.error(error)

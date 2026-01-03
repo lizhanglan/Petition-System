@@ -121,8 +121,17 @@
           </template>
           
           <div class="preview-container">
+            <!-- ONLYOFFICE预览 -->
+            <OnlyOfficeEditor
+              v-if="previewType === 'onlyoffice' && currentDocumentId"
+              :document-id="currentDocumentId"
+              mode="view"
+              height="calc(100vh - 240px)"
+              @error="handlePreviewError"
+            />
+            
             <!-- 文档预览iframe -->
-            <div v-if="previewUrl" class="document-preview">
+            <div v-else-if="previewUrl" class="document-preview">
               <iframe 
                 :src="previewUrl" 
                 frameborder="0" 
@@ -131,6 +140,8 @@
                 style="border-radius: 4px;"
               ></iframe>
             </div>
+            
+            <!-- 空状态 -->
             <el-empty v-else description="暂无生成内容">
               <template #image>
                 <el-icon :size="60"><Document /></el-icon>
@@ -181,6 +192,7 @@ import {
 } from '@/api/documents'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import FallbackNotice from '@/components/FallbackNotice.vue'
+import OnlyOfficeEditor from '@/components/OnlyOfficeEditor.vue'
 
 const route = useRoute()
 const templates = ref<any[]>([])
@@ -190,6 +202,7 @@ const messages = ref<any[]>([])
 const inputMessage = ref('')
 const generatedContent = ref('')
 const previewUrl = ref('')
+const previewType = ref('')
 const generating = ref(false)
 const messagesRef = ref()
 const showFileSelector = ref(false)
@@ -284,8 +297,15 @@ const handleSend = async () => {
     
     // 获取文档预览URL
     if (result.preview_url) {
-      previewUrl.value = result.preview_url
-      console.log('[Generate] Preview URL:', result.preview_url)
+      // 检查是否是ONLYOFFICE预览
+      if (result.preview_url === 'use_onlyoffice_component') {
+        previewType.value = 'onlyoffice'
+        console.log('[Generate] Using ONLYOFFICE component for preview')
+      } else {
+        previewUrl.value = result.preview_url
+        previewType.value = 'direct'
+        console.log('[Generate] Preview URL:', result.preview_url)
+      }
     } else {
       console.warn('[Generate] No preview_url in response, trying to fetch...')
       // 如果没有返回preview_url，尝试获取预览
@@ -293,8 +313,14 @@ const handleSend = async () => {
         const previewResponse: any = await fetch(`/api/v1/documents/${result.id}/preview`)
         const previewData = await previewResponse.json()
         if (previewData.preview_url) {
-          previewUrl.value = previewData.preview_url
-          console.log('[Generate] Fetched preview URL:', previewData.preview_url)
+          if (previewData.preview_url === 'use_onlyoffice_component') {
+            previewType.value = 'onlyoffice'
+            console.log('[Generate] Fetched ONLYOFFICE preview')
+          } else {
+            previewUrl.value = previewData.preview_url
+            previewType.value = 'direct'
+            console.log('[Generate] Fetched preview URL:', previewData.preview_url)
+          }
         }
       } catch (error) {
         console.error('[Generate] Failed to fetch preview:', error)
@@ -364,6 +390,7 @@ const handleClearHistory = async () => {
     messages.value = []
     generatedContent.value = ''
     previewUrl.value = ''
+    previewType.value = ''
     currentDocumentId.value = null
     fileReferences.value = []
     sessionInfo.value = { message_count: 0, file_reference_count: 0 }
@@ -420,6 +447,11 @@ const formatTime = (timestamp: string) => {
 
 const formatDate = (date: string) => {
   return new Date(date).toLocaleString('zh-CN')
+}
+
+const handlePreviewError = (error: string) => {
+  console.error('[Generate] Preview error:', error)
+  ElMessage.error('预览加载失败')
 }
 
 onMounted(() => {

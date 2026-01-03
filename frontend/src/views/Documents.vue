@@ -30,11 +30,12 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280">
+        <el-table-column label="操作" width="320">
           <template #default="{ row }">
             <el-button-group>
               <el-button size="small" @click="handleView(row)">查看</el-button>
               <el-button size="small" type="primary" @click="handleEdit(row)">编辑</el-button>
+              <el-button size="small" type="success" @click="handleOnlineEdit(row)">在线编辑</el-button>
               <el-button size="small" type="info" @click="handleVersions(row)">版本</el-button>
             </el-button-group>
           </template>
@@ -83,6 +84,17 @@
             </el-icon>
             <p>正在加载预览...</p>
           </div>
+          
+          <!-- ONLYOFFICE预览 -->
+          <OnlyOfficeEditor
+            v-else-if="previewType === 'onlyoffice' && currentDocument"
+            :document-id="currentDocument.id"
+            mode="view"
+            height="600px"
+            @error="handlePreviewError"
+          />
+          
+          <!-- 其他预览方式 -->
           <div v-else-if="previewUrl" class="preview-iframe-wrapper">
             <iframe 
               :src="previewUrl" 
@@ -92,6 +104,8 @@
               class="document-preview-iframe"
             ></iframe>
           </div>
+          
+          <!-- 降级显示 -->
           <div v-else class="preview-fallback">
             <el-alert 
               title="无法加载预览" 
@@ -209,6 +223,25 @@
         <el-button type="primary" @click="handleClassificationUpdate">确定</el-button>
       </template>
     </el-dialog>
+    
+    <!-- 在线编辑对话框 -->
+    <el-dialog 
+      v-model="onlineEditVisible" 
+      title="在线编辑文书" 
+      width="90%" 
+      top="5vh"
+      destroy-on-close
+      :close-on-click-modal="false"
+    >
+      <OnlyOfficeEditor
+        v-if="currentDocument"
+        :document-id="currentDocument.id"
+        mode="edit"
+        height="80vh"
+        @error="handlePreviewError"
+        @save="handleOnlineEditSave"
+      />
+    </el-dialog>
   </div>
 </template>
 
@@ -217,6 +250,7 @@ import { ref, onMounted } from 'vue'
 import { getDocumentList, updateClassification } from '@/api/documents'
 import VersionManager from '@/components/VersionManager.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
+import OnlyOfficeEditor from '@/components/OnlyOfficeEditor.vue'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 
@@ -230,6 +264,8 @@ const editDocument = ref<any>(null)
 const saving = ref(false)
 const previewUrl = ref('')
 const previewLoading = ref(false)
+const previewType = ref('')
+const onlineEditVisible = ref(false)
 const classificationVisible = ref(false)
 const classificationForm = ref({
   documentId: 0,
@@ -253,13 +289,21 @@ const loadDocuments = async () => {
 const handleView = async (row: any) => {
   currentDocument.value = row
   previewUrl.value = ''
+  previewType.value = ''
   previewLoading.value = true
   viewVisible.value = true
   
   try {
     // 如果文书已经有预览URL，直接使用
     if (row.preview_url) {
-      previewUrl.value = row.preview_url
+      if (row.preview_url === 'use_onlyoffice_component') {
+        previewType.value = 'onlyoffice'
+        console.log('[Documents] Using ONLYOFFICE component for preview')
+      } else {
+        previewUrl.value = row.preview_url
+        previewType.value = 'direct'
+        console.log('[Documents] Using direct URL for preview')
+      }
       previewLoading.value = false
       return
     }
@@ -274,7 +318,14 @@ const handleView = async (row: any) => {
     if (response.ok) {
       const data = await response.json()
       if (data.preview_url) {
-        previewUrl.value = data.preview_url
+        if (data.preview_url === 'use_onlyoffice_component') {
+          previewType.value = 'onlyoffice'
+          console.log('[Documents] Fetched ONLYOFFICE preview')
+        } else {
+          previewUrl.value = data.preview_url
+          previewType.value = 'direct'
+          console.log('[Documents] Fetched preview URL:', data.preview_url)
+        }
       }
     }
   } catch (error) {
@@ -447,6 +498,22 @@ const handleClassificationUpdate = async () => {
     console.error(error)
     ElMessage.error('密级更新失败')
   }
+}
+
+const handlePreviewError = (error: string) => {
+  console.error('[Documents] Preview error:', error)
+  ElMessage.error('预览加载失败')
+}
+
+const handleOnlineEdit = (row: any) => {
+  currentDocument.value = row
+  onlineEditVisible.value = true
+}
+
+const handleOnlineEditSave = () => {
+  ElMessage.success('文书已保存')
+  onlineEditVisible.value = false
+  loadDocuments()
 }
 
 onMounted(() => {

@@ -72,9 +72,21 @@
     </el-card>
     
     <el-dialog v-model="previewVisible" title="文件预览" width="80%" :fullscreen="true">
-      <div v-if="previewUrl && !previewError">
+      <!-- ONLYOFFICE预览 -->
+      <OnlyOfficeEditor
+        v-if="previewType === 'onlyoffice' && currentFile && !previewError"
+        :file-id="currentFile.id"
+        mode="view"
+        height="80vh"
+        @error="handlePreviewError"
+      />
+      
+      <!-- 其他预览方式 -->
+      <div v-else-if="previewUrl && !previewError">
         <iframe :src="previewUrl" style="width: 100%; height: 80vh; border: none;" @error="handlePreviewError" />
       </div>
+      
+      <!-- 错误提示 -->
       <div v-else class="preview-error">
         <el-empty description="无法预览该文件，可能是预览服务暂时不可用">
           <el-button type="primary" @click="handleDownloadCurrent">下载文件</el-button>
@@ -116,6 +128,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { uploadFile, batchUploadFiles, getFileList, getFilePreview, deleteFile } from '@/api/files'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import OnlyOfficeEditor from '@/components/OnlyOfficeEditor.vue'
 
 const router = useRouter()
 const fileList = ref([])
@@ -123,6 +136,7 @@ const loading = ref(false)
 const previewVisible = ref(false)
 const previewUrl = ref('')
 const previewError = ref(false)
+const previewType = ref('')
 const currentFile = ref<any>(null)
 
 // 批量上传相关
@@ -209,20 +223,38 @@ const handleBatchSelect = async (file: any, fileList: any[]) => {
 
 const handlePreview = async (row: any) => {
   try {
+    // 防御性检查：确保row和row.id存在
+    if (!row || !row.id) {
+      ElMessage.error('文件ID无效')
+      console.error('Invalid file row:', row)
+      return
+    }
+    
     currentFile.value = row
     previewError.value = false
+    previewType.value = ''
     const data: any = await getFilePreview(row.id)
+    
+    console.log('[Files] Preview data:', data)
     
     if (!data.preview_url) {
       previewError.value = true
       ElMessage.warning('预览服务暂时不可用')
     } else {
-      previewUrl.value = data.preview_url
+      // 检查是否是ONLYOFFICE预览
+      if (data.preview_url === 'use_onlyoffice_component') {
+        previewType.value = 'onlyoffice'
+        console.log('[Files] Using ONLYOFFICE component for preview')
+      } else {
+        previewUrl.value = data.preview_url
+        previewType.value = 'direct'
+        console.log('[Files] Using direct URL for preview:', data.preview_url)
+      }
     }
     
     previewVisible.value = true
   } catch (error) {
-    console.error(error)
+    console.error('Preview error:', error)
     previewError.value = true
     previewVisible.value = true
   }
@@ -240,11 +272,25 @@ const handleDownloadCurrent = () => {
 }
 
 const handleReview = (row: any) => {
+  // 防御性检查：确保row和row.id存在
+  if (!row || !row.id) {
+    ElMessage.error('文件ID无效')
+    console.error('Invalid file row:', row)
+    return
+  }
+  
   router.push(`/review/${row.id}`)
 }
 
 const handleDelete = async (row: any) => {
   try {
+    // 防御性检查：确保row和row.id存在
+    if (!row || !row.id) {
+      ElMessage.error('文件ID无效')
+      console.error('Invalid file row:', row)
+      return
+    }
+    
     await ElMessageBox.confirm('确定要删除该文件吗？', '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',

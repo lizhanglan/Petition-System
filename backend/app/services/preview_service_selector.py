@@ -1,15 +1,15 @@
 """
 预览服务选择器
-根据配置优先使用WPS服务，失败时降级到华为云服务
+根据配置优先使用ONLYOFFICE服务，失败时降级到华为云服务
 """
 from typing import Optional, Dict, Any
 from app.core.config import settings
-from app.services.wps_service import wps_service
+from app.services.onlyoffice_service import onlyoffice_service
 from app.services.office_preview_service import office_preview_service
 
 
 class PreviewServiceSelector:
-    """预览服务选择器，实现WPS优先，华为云降级的策略"""
+    """预览服务选择器，实现ONLYOFFICE优先，华为云降级的策略"""
     
     async def get_preview_url(
         self,
@@ -19,7 +19,7 @@ class PreviewServiceSelector:
         permission: str = "read"
     ) -> Optional[Dict[str, Any]]:
         """
-        获取文档预览URL（优先使用WPS，失败时降级到华为云）
+        获取文档预览URL（优先使用ONLYOFFICE，失败时降级到华为云）
         
         Args:
             file_url: 文件的公网访问URL
@@ -33,31 +33,22 @@ class PreviewServiceSelector:
         preview_url = None
         service_type = None
         
-        # 1. 优先尝试WPS服务（如果已启用）
-        if settings.WPS_ENABLED and settings.WPS_APP_ID and settings.WPS_APP_SECRET:
-            print(f"[PreviewSelector] 尝试使用WPS服务...")
+        # 1. 优先尝试ONLYOFFICE服务（如果已启用）
+        if settings.ONLYOFFICE_ENABLED and settings.ONLYOFFICE_SERVER_URL:
+            print(f"[PreviewSelector] 尝试使用ONLYOFFICE服务...")
             try:
-                preview_url = await wps_service.get_preview_url(
-                    file_url=file_url,
-                    file_name=file_name,
-                    user_id=user_id,
-                    permission=permission
-                )
-                
-                if preview_url:
-                    service_type = "wps"
-                    print(f"[PreviewSelector] WPS服务成功: {preview_url}")
-                    return {
-                        "preview_url": preview_url,
-                        "service_type": service_type,
-                        "file_url": file_url
-                    }
-                else:
-                    print(f"[PreviewSelector] WPS服务返回空URL，尝试降级...")
+                # ONLYOFFICE使用前端组件，返回特殊标记
+                service_type = "onlyoffice"
+                print(f"[PreviewSelector] ONLYOFFICE服务可用")
+                return {
+                    "preview_url": "use_onlyoffice_component",  # 前端识别此标记使用ONLYOFFICE组件
+                    "service_type": service_type,
+                    "file_url": file_url
+                }
             except Exception as e:
-                print(f"[PreviewSelector] WPS服务异常: {e}，尝试降级...")
+                print(f"[PreviewSelector] ONLYOFFICE服务异常: {e}，尝试降级...")
         else:
-            print(f"[PreviewSelector] WPS服务未启用（WPS_ENABLED={settings.WPS_ENABLED}）")
+            print(f"[PreviewSelector] ONLYOFFICE服务未启用（ONLYOFFICE_ENABLED={settings.ONLYOFFICE_ENABLED}）")
         
         # 2. 降级到华为云服务
         print(f"[PreviewSelector] 使用华为云预览服务...")
@@ -104,7 +95,7 @@ class PreviewServiceSelector:
         callback_url: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        获取文档编辑URL（仅支持WPS）
+        获取文档编辑URL（优先使用ONLYOFFICE）
         
         Args:
             file_url: 文件的公网访问URL
@@ -116,33 +107,26 @@ class PreviewServiceSelector:
         Returns:
             包含edit_url、token等信息的字典，或None
         """
-        # 编辑功能仅支持WPS
-        if not settings.WPS_ENABLED or not settings.WPS_APP_ID or not settings.WPS_APP_SECRET:
-            print(f"[PreviewSelector] WPS服务未启用，无法提供编辑功能")
-            return None
+        # 1. 优先使用ONLYOFFICE编辑功能
+        if settings.ONLYOFFICE_ENABLED and settings.ONLYOFFICE_SERVER_URL:
+            print(f"[PreviewSelector] 使用ONLYOFFICE编辑服务...")
+            try:
+                # ONLYOFFICE使用前端组件，返回特殊标记
+                print(f"[PreviewSelector] ONLYOFFICE编辑服务可用")
+                return {
+                    "edit_url": "use_onlyoffice_component",  # 前端识别此标记使用ONLYOFFICE组件
+                    "service_type": "onlyoffice",
+                    "file_url": file_url
+                }
+            except Exception as e:
+                print(f"[PreviewSelector] ONLYOFFICE编辑服务异常: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print(f"[PreviewSelector] ONLYOFFICE服务未启用，无法提供编辑功能")
         
-        print(f"[PreviewSelector] 使用WPS编辑服务...")
-        try:
-            result = await wps_service.get_edit_url(
-                file_url=file_url,
-                file_name=file_name,
-                user_id=user_id,
-                user_name=user_name,
-                callback_url=callback_url
-            )
-            
-            if result:
-                result["service_type"] = "wps"
-                print(f"[PreviewSelector] WPS编辑服务成功")
-            else:
-                print(f"[PreviewSelector] WPS编辑服务失败")
-            
-            return result
-        except Exception as e:
-            print(f"[PreviewSelector] WPS编辑服务异常: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
+        # 2. 编辑功能不支持降级（华为云仅支持预览）
+        return None
 
 
 # 创建全局实例
