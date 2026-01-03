@@ -86,7 +86,7 @@ services:
       MINIO_ENDPOINT: 124.70.74.202:9000
       MINIO_EXTERNAL_URL: http://124.70.74.202:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-petition-files}
       MINIO_SECURE: "false"
       
