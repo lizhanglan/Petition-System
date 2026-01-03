@@ -84,6 +84,7 @@ services:
       
       # ========== MinIO 配置 - 修复字段名 MINIO_BUCKET → MINIO_BUCKET_NAME ✅ ==========
       MINIO_ENDPOINT: minio:9000
+      MINIO_EXTERNAL_URL: http://124.70.74.202:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
       MINIO_BUCKET: ${MINIO_BUCKET:-petition-files}
