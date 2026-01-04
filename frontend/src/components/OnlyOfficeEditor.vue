@@ -78,13 +78,57 @@ const initEditor = async () => {
     
     // 获取编辑器配置
     // 注意：request拦截器已经返回了response.data，所以这里直接就是配置对象
+    console.log('[OnlyOffice] Requesting config with:', {
+      file_id: props.fileId,
+      document_id: props.documentId,
+      mode: props.mode
+    })
+    
     const config = await request.post('/onlyoffice/config', {
       file_id: props.fileId,
       document_id: props.documentId,
       mode: props.mode
     })
     
-    console.log('[OnlyOffice] Editor config:', config)
+    console.log('[OnlyOffice] Raw response:', config)
+    console.log('[OnlyOffice] Response type:', typeof config)
+    console.log('[OnlyOffice] Response keys:', config ? Object.keys(config) : 'null/undefined')
+    
+    // 检查是否需要再次提取data
+    if (config && config.data && typeof config.data === 'object') {
+      console.warn('[OnlyOffice] WARNING: Response has .data property, extracting it')
+      const actualConfig = config.data
+      console.log('[OnlyOffice] Actual config after extraction:', actualConfig)
+      actualConfig.events = {
+        onDocumentReady: () => {
+          console.log('[OnlyOffice] Document ready')
+          loading.value = false
+        },
+        onError: (event: any) => {
+          console.error('[OnlyOffice] Error:', event)
+          error.value = `编辑器错误: ${JSON.stringify(event.data)}`
+          emit('error', error.value)
+        },
+        onWarning: (event: any) => {
+          console.warn('[OnlyOffice] Warning:', event)
+        },
+        onInfo: (event: any) => {
+          console.log('[OnlyOffice] Info:', event)
+        }
+      }
+      
+      // 初始化编辑器
+      editor = new window.DocsAPI.DocEditor('onlyoffice-editor', actualConfig)
+      console.log('[OnlyOffice] Editor initialized with extracted config')
+      return
+    }
+    
+    console.log('[OnlyOffice] Using config directly (no .data property)')
+    
+    // 验证config不是undefined
+    if (!config || typeof config !== 'object') {
+      throw new Error(`Invalid config received: ${JSON.stringify(config)}`)
+    }
     
     // 添加事件处理
     config.events = {
