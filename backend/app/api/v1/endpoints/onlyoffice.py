@@ -223,7 +223,10 @@ async def download_document_for_onlyoffice(
         raise HTTPException(status_code=404, detail="文书不存在")
     
     print(f"[OnlyOffice] Document found: {document.title}")
-    print(f"[OnlyOffice] Storage path: {document.file_path}")
+    
+    # 生成文件路径（与生成时保持一致）
+    file_path = f"temp_preview/{document.user_id}/{document.id}.docx"
+    print(f"[OnlyOffice] Storage path: {file_path}")
     
     # 对文件名进行URL编码以支持中文
     from urllib.parse import quote
@@ -246,7 +249,29 @@ async def download_document_for_onlyoffice(
     try:
         # 从MinIO下载文书
         print(f"[OnlyOffice] Downloading from MinIO...")
-        file_data = await minio_client.download_file(document.file_path)
+        file_data = await minio_client.download_file(file_path)
+        
+        # 如果文件不存在，尝试重新生成
+        if not file_data:
+            print(f"[OnlyOffice] File not found in MinIO, regenerating...")
+            from app.services.document_export_service import document_export_service
+            
+            # 重新生成 DOCX 文件
+            docx_bytes = await document_export_service.export_to_docx(
+                content=document.content,
+                title=document.title,
+                options={"document_type": document.document_type}
+            )
+            
+            # 上传到 MinIO
+            await minio_client.upload_file(
+                file_path,
+                docx_bytes,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+            
+            file_data = docx_bytes
+            print(f"[OnlyOffice] File regenerated and uploaded, size: {len(file_data)} bytes")
         
         print(f"[OnlyOffice] SUCCESS: Document downloaded from MinIO, size: {len(file_data)} bytes")
         

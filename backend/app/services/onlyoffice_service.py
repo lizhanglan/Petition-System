@@ -80,13 +80,16 @@ class OnlyOfficeService:
         # 获取文档类型
         document_type = self.get_document_type(file_type)
         
-        # 使用后端代理URL
-        # 注意：ONLYOFFICE服务器通过Docker内部网络访问后端
-        # 使用容器名 petition-backend 而不是公网IP
-        file_url = f"http://petition-backend:8000/api/v1/onlyoffice/download/file/{file_id}"
-        
-        print(f"[OnlyOfficeService] Generated file URL: {file_url}")
-        print(f"  - Using Docker internal network")
+        # 使用后端公网URL，让ONLYOFFICE服务器可以访问
+        # 优先使用BACKEND_PUBLIC_URL，如果没有配置则使用Docker内部网络
+        if self.backend_public_url and not self.backend_public_url.startswith('http://petition-backend'):
+            file_url = f"{self.backend_public_url}/api/v1/onlyoffice/download/file/{file_id}"
+            print(f"[OnlyOfficeService] Generated file URL: {file_url}")
+            print(f"  - Using public URL for ONLYOFFICE access")
+        else:
+            file_url = f"http://petition-backend:8000/api/v1/onlyoffice/download/file/{file_id}"
+            print(f"[OnlyOfficeService] Generated file URL: {file_url}")
+            print(f"  - Using Docker internal network")
         print(f"  - file_id: {file_id}")
         
         # 配置（无JWT版本，更简单）
