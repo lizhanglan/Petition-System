@@ -1,6 +1,9 @@
 # 构建阶段
 FROM node:20-alpine AS builder
 
+# 添加构建参数，用于破坏缓存
+ARG CACHEBUST=1
+
 # 设置工作目录
 WORKDIR /app
 

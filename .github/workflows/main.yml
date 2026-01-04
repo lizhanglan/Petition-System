@@ -27,7 +27,9 @@ jobs:
             
             # 3. 重新构建并启动有变动的镜像（后端或前端）
             # --build 会自动识别代码变动
-            docker-compose up -d --build
+            # --no-cache 强制重新构建，避免缓存问题
+            docker-compose build --no-cache
+            docker-compose up -d
             
             # 4. 自动执行数据库同步（防止新功能缺少表结构）
             docker exec petition-backend python manual_create_tables.py
