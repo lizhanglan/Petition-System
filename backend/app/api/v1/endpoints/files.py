@@ -278,7 +278,21 @@ async def get_file_preview(
         if not file_url:
             raise HTTPException(status_code=500, detail="无法获取文件 URL")
         
-        # 使用预览服务选择器（优先WPS，降级到华为云）
+        # 使用ONLYOFFICE预览（支持docx, doc, xlsx, xls, pptx, ppt, pdf等）
+        supported_types = ['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'pdf']
+        file_ext = file.file_type.lower().lstrip('.')
+        
+        if file_ext in supported_types:
+            print(f"[Preview] Using ONLYOFFICE for {file_ext} file")
+            return {
+                "preview_url": "use_onlyoffice_component",
+                "file_url": file_url,
+                "preview_type": "onlyoffice",
+                "file_type": file.file_type,
+                "file_name": file.file_name
+            }
+        
+        # 不支持的文件类型，尝试使用WPS或华为云
         preview_result = await preview_service_selector.get_preview_url(
             file_url=file_url,
             file_name=file.file_name,
