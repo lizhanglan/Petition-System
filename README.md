@@ -206,12 +206,17 @@ GET    /api/v1/audit-logs/export    # 日志导出
 
 ### 0. 脚本说明
 
-项目提供了多个便捷脚本，详见 **[scripts/README.md](scripts/README.md)**
+项目提供了统一的启动脚本，支持本地开发和Docker部署两种模式。
 
-**常用脚本**：
-- `start.bat` - Windows本地启动（开发环境）
-- `deploy.sh` - Linux/Mac本地部署
-- `scripts/deployment/deploy-cloud.sh` - 云服务器部署
+**推荐使用**：
+- Windows: `run.bat` - 交互式菜单，功能完整
+- Linux/Mac: `./run.sh` - 交互式菜单或命令行模式
+
+**传统脚本**（仍可使用）：
+- `start.bat` - Windows本地快速启动
+- `deploy.sh` / `deploy.bat` - Docker快速部署
+
+详见 **[scripts/统一启动脚本说明.md](scripts/统一启动脚本说明.md)** 和 **[scripts/README.md](scripts/README.md)**
 
 ### 1. 环境要求
 
