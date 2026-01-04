@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, files, documents, templates, versions, audit_logs, health, admin, wps, onlyoffice
+from app.api.v1.endpoints import auth, files, documents, templates, versions, audit_logs, health, admin, onlyoffice
 
 api_router = APIRouter()
 
@@ -11,5 +11,4 @@ api_router.include_router(versions.router, prefix="/versions", tags=["版本管�
 api_router.include_router(audit_logs.router, prefix="/audit-logs", tags=["审计日志"])
 api_router.include_router(health.router, prefix="/health", tags=["健康监控"])
 api_router.include_router(admin.router, prefix="/admin", tags=["系统管理"])
-api_router.include_router(wps.router, prefix="/wps", tags=["WPS文档处理"])
 api_router.include_router(onlyoffice.router, prefix="/onlyoffice", tags=["ONLYOFFICE文档编辑"])
