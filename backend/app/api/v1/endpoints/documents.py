@@ -613,6 +613,19 @@ def _fill_template(template_content: str, structured_data: dict, ai_content: str
         # 如果没有模板内容，直接返回 AI 生成的内容（已格式化）
         return ai_content
     
+    # 检查模板内容是否是JSON格式（提取模板的情况）
+    # 如果是JSON格式，直接使用AI生成的内容
+    template_stripped = template_content.strip()
+    if template_stripped.startswith('{') and template_stripped.endswith('}'):
+        try:
+            import json
+            json.loads(template_stripped)
+            # 是有效的JSON，说明这是提取的模板规则，直接返回AI内容
+            print(f"[FillTemplate] 检测到JSON格式模板，直接使用AI生成内容")
+            return ai_content
+        except:
+            pass  # 不是有效JSON，继续正常处理
+    
     # 替换占位符
     filled_content = template_content
     for field_id, value in structured_data.items():
