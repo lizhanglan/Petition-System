@@ -4,10 +4,10 @@
       <el-icon class="is-loading"><Loading /></el-icon>
       <span>正在加载编辑器...</span>
     </div>
-    <div v-else-if="error" class="error">
+    <div v-if="error" class="error">
       <el-alert :title="error" type="error" show-icon />
     </div>
-    <div v-else id="onlyoffice-editor" :style="{ height: height }"></div>
+    <div id="onlyoffice-editor" :style="{ height: height }" v-show="!loading && !error"></div>
   </div>
 </template>
 
