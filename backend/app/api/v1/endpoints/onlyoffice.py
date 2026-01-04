@@ -147,6 +147,10 @@ async def download_file_for_onlyoffice(
     content_type = mime_types.get(file.file_type.lower(), 'application/octet-stream')
     print(f"[OnlyOffice] Content type: {content_type}")
     
+    # 对文件名进行URL编码以支持中文
+    from urllib.parse import quote
+    encoded_filename = quote(file.file_name)
+    
     # 如果是HEAD请求，只返回头部信息
     if request.method == "HEAD":
         print(f"[OnlyOffice] HEAD request - returning headers only")
