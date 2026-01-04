@@ -297,49 +297,119 @@ npm run dev
 │   │   │       └── endpoints/
 │   │   │           ├── auth.py          # 认证接口
 │   │   │           ├── files.py         # 文件接口
-│   │   │           ├── documents.py     # 文档接口 ✨
+│   │   │           ├── documents.py     # 文档接口
 │   │   │           ├── templates.py     # 模板接口
-│   │   │           └── versions.py      # 版本接口
+│   │   │           ├── versions.py      # 版本接口
+│   │   │           ├── audit_logs.py    # 审计日志接口
+│   │   │           ├── health.py        # 健康监控接口
+│   │   │           ├── admin.py         # 系统管理接口
+│   │   │           └── onlyoffice.py    # ONLYOFFICE接口
 │   │   ├── core/           # 核心配置
 │   │   │   ├── config.py              # 配置管理
 │   │   │   ├── database.py            # 数据库
 │   │   │   ├── minio_client.py        # MinIO 客户端
-│   │   │   └── redis.py               # Redis 客户端
+│   │   │   ├── redis.py               # Redis 客户端
+│   │   │   ├── security.py            # 安全认证
+│   │   │   ├── audit.py               # 审计日志
+│   │   │   ├── performance.py         # 性能监控
+│   │   │   └── rules_config.py        # 规则配置
 │   │   ├── models/         # 数据模型
 │   │   │   ├── user.py                # 用户模型
 │   │   │   ├── file.py                # 文件模型
 │   │   │   ├── document.py            # 文档模型
 │   │   │   ├── template.py            # 模板模型
 │   │   │   ├── version.py             # 版本模型
-│   │   │   └── audit_log.py           # 审计日志
+│   │   │   ├── audit_log.py           # 审计日志
+│   │   │   └── validation.py          # 验证规则
 │   │   └── services/       # 业务服务
 │   │       ├── deepseek_service.py           # DeepSeek AI
-│   │       ├── file_parser_service.py        # 文件解析 ✨
-│   │       ├── document_export_service.py    # 文档导出 ✨
-│   │       └── office_preview_service.py     # 预览服务
+│   │       ├── file_parser_service.py        # 文件解析
+│   │       ├── document_export_service.py    # 文档导出
+│   │       ├── office_preview_service.py     # 华为云预览
+│   │       ├── onlyoffice_service.py         # ONLYOFFICE服务
+│   │       ├── preview_service_selector.py   # 预览服务选择器
+│   │       ├── local_rules_engine.py         # 本地规则引擎
+│   │       ├── rule_executor.py              # 规则执行器
+│   │       ├── version_compare_service.py    # 版本对比
+│   │       ├── conversation_service.py       # 对话服务
+│   │       └── cache_service.py              # 缓存服务
+│   ├── config/             # 配置文件
+│   │   └── validation_rules.json    # 验证规则配置
 │   ├── requirements.txt    # Python 依赖
-│   └── run.py             # 启动文件
+│   ├── run.py             # 启动文件
+│   ├── create_db.py       # 创建数据库
+│   ├── manual_create_tables.py      # 手动创建表
+│   ├── init_standard_templates.py   # 初始化标准模板
+│   └── optimize_database.py         # 数据库优化
 ├── frontend/               # 前端代码
 │   ├── src/
 │   │   ├── api/           # API 接口
 │   │   ├── stores/        # 状态管理
 │   │   ├── views/         # 页面组件
 │   │   │   ├── Login.vue           # 登录页
+│   │   │   ├── Register.vue        # 注册页
+│   │   │   ├── Dashboard.vue       # 仪表板
 │   │   │   ├── Files.vue           # 文件管理
 │   │   │   ├── Review.vue          # 文件研判
 │   │   │   ├── Generate.vue        # 文书生成
 │   │   │   ├── Documents.vue       # 文档管理
-│   │   │   └── Templates.vue       # 模板管理
+│   │   │   ├── Templates.vue       # 模板管理
+│   │   │   ├── AuditLogs.vue       # 审计日志
+│   │   │   ├── SystemHealth.vue    # 系统健康
+│   │   │   └── RulesManagement.vue # 规则管理
+│   │   ├── components/    # 组件
+│   │   │   ├── OnlyOfficeEditor.vue    # ONLYOFFICE编辑器
+│   │   │   ├── RichTextEditor.vue      # 富文本编辑器
+│   │   │   ├── VersionManager.vue      # 版本管理器
+│   │   │   └── FallbackNotice.vue      # 降级通知
 │   │   └── router/        # 路由配置
-│   └── package.json       # Node 依赖
+│   ├── package.json       # Node 依赖
+│   ├── Dockerfile         # Docker镜像
+│   └── nginx.conf         # Nginx配置
+├── scripts/               # 脚本目录
+│   ├── README.md          # 脚本说明
+│   ├── 统一启动脚本说明.md  # 启动脚本文档
+│   ├── 脚本整理记录.md      # 整理记录
+│   ├── deployment/        # 部署脚本
+│   │   ├── deploy-cloud.sh
+│   │   └── deploy-server.sh
+│   ├── debug/             # 调试脚本
+│   │   ├── check-server-code.bat
+│   │   ├── check-server-code.sh
+│   │   ├── check-hot-reload-status.bat
+│   │   └── server-commands.sh
+│   └── archive/           # 归档脚本
+│       ├── deploy-with-mount.bat
+│       ├── push-and-rebuild.bat
+│       ├── restart-backend.bat
+│       └── rebuild-frontend.sh
+├── docs/                  # 文档目录
+│   ├── README.md          # 文档说明
+│   ├── ONLYOFFICE文档索引.md           # ONLYOFFICE文档索引
+│   ├── ONLYOFFICE集成完整指南.md       # ONLYOFFICE实施指南
+│   ├── ONLYOFFICE问题排查手册.md       # ONLYOFFICE问题排查
+│   ├── development/       # 开发文档
+│   ├── troubleshooting/   # 问题排查
+│   ├── deployment/        # 部署文档
+│   └── archive/           # 归档文档
 ├── .env                   # 环境配置
-├── README.md             # 项目说明
-├── 系统需求实现对比分析报告.md      # 需求对比 ✨
-├── 功能对照明细表.md                # 功能对照 ✨
-├── 剩余功能开发清单.md              # 开发清单 ✨
-├── 开发进度总结.md                  # 进度总结 ✨
-├── 新功能安装测试指南.md            # 测试指南 ✨
-└── 本次开发总结.md                  # 开发总结 ✨
+├── .env.example           # 环境配置示例
+├── .gitignore             # Git忽略文件
+├── docker-compose.yml     # Docker Compose配置
+├── run.bat                # Windows统一启动脚本
+├── run.sh                 # Linux/Mac统一启动脚本
+├── README.md              # 项目说明
+├── README-开发进度.md      # 开发进度
+├── SETUP.md               # 环境搭建指南
+├── DOCKER_DEPLOY.md       # Docker部署指南
+├── DEPLOY_QUICK_START.md  # 快速部署指南
+├── DEPLOYMENT_CHECKLIST.md # 部署检查清单
+├── CLOUD_DEPLOYMENT_GUIDE.md # 云服务器部署指南
+├── 文档导航.md             # 文档导航
+├── 项目交付文档.md         # 项目交付文档
+├── 需求达成最终报告.md     # 需求达成报告
+├── 新功能安装测试指南.md   # 测试指南
+└── 信访智能文书生成系统需求规格说明书（最终版）.md  # 需求规格
 ```
 
 ## 功能特性
