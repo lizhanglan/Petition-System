@@ -47,6 +47,11 @@ const router = createRouter({
           component: () => import('@/views/Documents.vue')
         },
         {
+          path: 'documents/:id/edit',
+          name: 'DocumentEdit',
+          component: () => import('@/views/DocumentEdit.vue')
+        },
+        {
           path: 'templates',
           name: 'Templates',
           component: () => import('@/views/Templates.vue')

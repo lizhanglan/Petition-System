@@ -257,6 +257,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { getDocumentList, updateClassification } from '@/api/documents'
 import VersionManager from '@/components/VersionManager.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
@@ -264,6 +265,7 @@ import OnlyOfficeEditor from '@/components/OnlyOfficeEditor.vue'
 import { ElMessage } from 'element-plus'
 import { Loading, ArrowDown } from '@element-plus/icons-vue'
 
+const router = useRouter()
 const documentList = ref([])
 const loading = ref(false)
 const viewVisible = ref(false)
@@ -534,8 +536,8 @@ const handlePreviewError = (error: string) => {
 }
 
 const handleOnlineEdit = (row: any) => {
-  currentDocument.value = row
-  onlineEditVisible.value = true
+  // 跳转到独立的编辑页面
+  router.push(`/documents/${row.id}/edit`)
 }
 
 const handleOnlineEditSave = () => {
