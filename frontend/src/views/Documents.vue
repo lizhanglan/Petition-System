@@ -122,7 +122,17 @@
       
       <template #footer>
         <el-button @click="viewVisible = false">关闭</el-button>
-        <el-button type="primary" @click="handleDownload">下载文书</el-button>
+        <el-dropdown @command="handleDownloadFormat">
+          <el-button type="primary">
+            下载文书<el-icon class="el-icon--right"><arrow-down /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="pdf">下载为 PDF</el-dropdown-item>
+              <el-dropdown-item command="docx">下载为 Word</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </template>
     </el-dialog>
 
@@ -252,7 +262,7 @@ import VersionManager from '@/components/VersionManager.vue'
 import RichTextEditor from '@/components/RichTextEditor.vue'
 import OnlyOfficeEditor from '@/components/OnlyOfficeEditor.vue'
 import { ElMessage } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, ArrowDown } from '@element-plus/icons-vue'
 
 const documentList = ref([])
 const loading = ref(false)
@@ -335,7 +345,7 @@ const handleView = async (row: any) => {
   }
 }
 
-const handleDownload = async () => {
+const handleDownloadFormat = async (format: string) => {
   if (!currentDocument.value) return
   
   try {
@@ -345,7 +355,7 @@ const handleDownload = async () => {
       return
     }
     
-    const response = await fetch(`/api/v1/documents/${currentDocument.value.id}/download?format=pdf`, {
+    const response = await fetch(`/api/v1/documents/${currentDocument.value.id}/download?format=${format}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -358,7 +368,8 @@ const handleDownload = async () => {
     
     // 获取文件名
     const contentDisposition = response.headers.get('Content-Disposition')
-    let filename = `${currentDocument.value.title}.pdf`
+    const extension = format === 'pdf' ? 'pdf' : 'docx'
+    let filename = `${currentDocument.value.title}.${extension}`
     if (contentDisposition) {
       const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition)
       if (matches && matches[1]) {
@@ -375,7 +386,7 @@ const handleDownload = async () => {
     a.click()
     window.URL.revokeObjectURL(url)
     document.body.removeChild(a)
-    ElMessage.success('文书下载成功')
+    ElMessage.success(`${format === 'pdf' ? 'PDF' : 'Word'}文档下载成功`)
   } catch (error: any) {
     console.error('Download error:', error)
     ElMessage.error(`文书下载失败: ${error.message}`)

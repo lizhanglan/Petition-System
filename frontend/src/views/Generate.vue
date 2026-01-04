@@ -113,9 +113,19 @@
           <template #header>
             <div class="card-header">
               <span>生成预览</span>
-              <div v-if="currentDocumentId">
+              <div v-if="currentDocumentId" style="display: flex; gap: 10px;">
                 <el-button type="success" @click="handleSave" size="small">保存文书</el-button>
-                <el-button type="primary" @click="handleDownload" size="small">下载</el-button>
+                <el-dropdown @command="handleDownloadFormat" size="small">
+                  <el-button type="primary" size="small">
+                    下载<el-icon class="el-icon--right"><arrow-down /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="pdf">下载为 PDF</el-dropdown-item>
+                      <el-dropdown-item command="docx">下载为 Word</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
               </div>
             </div>
           </template>
@@ -182,7 +192,7 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { User, ChatDotRound, Loading, Paperclip, Document } from '@element-plus/icons-vue'
+import { User, ChatDotRound, Loading, Paperclip, Document, ArrowDown } from '@element-plus/icons-vue'
 import { getTemplateList } from '@/api/templates'
 import { getFileList } from '@/api/files'
 import { 
@@ -486,7 +496,7 @@ const handleSave = () => {
   }
 }
 
-const handleDownload = async () => {
+const handleDownloadFormat = async (format: string) => {
   if (!currentDocumentId.value) {
     ElMessage.warning('没有可下载的文书')
     return
@@ -501,7 +511,7 @@ const handleDownload = async () => {
     }
     
     // 使用fetch下载，携带token
-    const response = await fetch(`/api/v1/documents/${currentDocumentId.value}/download?format=pdf`, {
+    const response = await fetch(`/api/v1/documents/${currentDocumentId.value}/download?format=${format}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -514,7 +524,8 @@ const handleDownload = async () => {
     
     // 获取文件名
     const contentDisposition = response.headers.get('Content-Disposition')
-    let filename = 'document.pdf'
+    const extension = format === 'pdf' ? 'pdf' : 'docx'
+    let filename = `document.${extension}`
     if (contentDisposition) {
       const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition)
       if (matches && matches[1]) {
@@ -533,7 +544,7 @@ const handleDownload = async () => {
     window.URL.revokeObjectURL(url)
     document.body.removeChild(a)
     
-    ElMessage.success('下载成功')
+    ElMessage.success(`${format === 'pdf' ? 'PDF' : 'Word'}文档下载成功`)
   } catch (error: any) {
     console.error('Download error:', error)
     ElMessage.error(`下载失败: ${error.message}`)
