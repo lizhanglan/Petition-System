@@ -36,3 +36,5 @@ jobs:
             
             # 5. 清理无用的旧镜像，节省服务器空间
             docker image prune -f
+
+            docker-compose up -d

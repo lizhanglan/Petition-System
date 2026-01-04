@@ -121,11 +121,11 @@
           </template>
           
           <div class="preview-container">
-            <!-- ONLYOFFICE预览 -->
+            <!-- ONLYOFFICE预览 - 可编辑模式 -->
             <OnlyOfficeEditor
               v-if="previewType === 'onlyoffice' && currentDocumentId"
               :document-id="currentDocumentId"
-              mode="view"
+              mode="edit"
               height="calc(100vh - 240px)"
               @error="handlePreviewError"
             />

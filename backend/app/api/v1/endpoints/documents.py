@@ -535,12 +535,13 @@ async def generate_document(
     )
     
     # 获取预览URL（优先WPS，降级到华为云）
+    # 生成的文档默认可编辑
     file_url = minio_client.get_file_url(temp_filename, expires=3600, inline=True)
     preview_result = await preview_service_selector.get_preview_url(
         file_url=file_url,
         file_name=f"{document.title}.docx",
         user_id=str(current_user.id),
-        permission="read"
+        permission="edit"  # 改为可编辑模式
     )
     
     preview_url = preview_result.get("preview_url") if preview_result else None

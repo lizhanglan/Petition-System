@@ -114,8 +114,16 @@ class FileParserService:
             解析结果字典
         """
         try:
-            # 创建 Word 文档对象
+            # 检查是否为旧版 .doc 格式
             doc_file = io.BytesIO(file_content)
+            
+            # 尝试检测文件头
+            file_header = file_content[:8]
+            if file_header[:4] == b'\xd0\xcf\x11\xe0':  # OLE2 格式（旧版 .doc）
+                print(f"[FileParser] 检测到旧版 Word 格式（.doc），不支持解析")
+                raise ValueError("不支持旧版 Word 格式（.doc），请转换为 .docx 格式后重试")
+            
+            # 创建 Word 文档对象
             document = Document(doc_file)
             
             # 提取元数据
