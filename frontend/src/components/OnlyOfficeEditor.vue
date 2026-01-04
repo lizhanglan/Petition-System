@@ -77,13 +77,13 @@ const initEditor = async () => {
     await loadOnlyOfficeScript()
     
     // 获取编辑器配置
-    const response = await request.post('/onlyoffice/config', {
+    // 注意：request拦截器已经返回了response.data，所以这里直接就是配置对象
+    const config = await request.post('/onlyoffice/config', {
       file_id: props.fileId,
       document_id: props.documentId,
       mode: props.mode
     })
     
-    const config = response.data
     console.log('[OnlyOffice] Editor config:', config)
     
     // 添加事件处理
