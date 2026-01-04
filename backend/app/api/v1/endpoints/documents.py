@@ -806,15 +806,18 @@ async def download_document(
     
     print(f"[Download] Document exported successfully: {len(file_bytes)} bytes")
     
-    # 返回文件
+    # 返回文件 - 处理中文文件名
+    from urllib.parse import quote
     filename = f"{document.title}.{format}"
+    # 对文件名进行URL编码以支持中文
+    encoded_filename = quote(filename)
     media_type = "application/pdf" if format == 'pdf' else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     
     return Response(
         content=file_bytes,
         media_type=media_type,
         headers={
-            "Content-Disposition": f"attachment; filename={filename}"
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
         }
     )
 
