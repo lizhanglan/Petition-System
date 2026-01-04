@@ -425,13 +425,35 @@ async def generate_document(
         summary = ai_data.get("summary", "")
         suggestions = ai_data.get("suggestions", [])
         
+        # 清理document_content中可能的JSON标记
+        if document_content:
+            # 移除可能的JSON字段标记
+            import re
+            # 移除类似 "document_content": 这样的标记
+            document_content = re.sub(r'"document_content"\s*:\s*"', '', document_content)
+            # 移除可能的转义引号
+            document_content = document_content.replace('\\"', '"')
+            document_content = document_content.replace('\\n', '\n')
+            # 移除开头和结尾的引号
+            document_content = document_content.strip('"')
+            # 移除可能的JSON对象标记
+            if document_content.startswith('{') and document_content.endswith('}'):
+                # 尝试再次解析，看是否是嵌套的JSON
+                try:
+                    nested_data = json.loads(document_content)
+                    if isinstance(nested_data, dict) and 'document_content' in nested_data:
+                        document_content = nested_data['document_content']
+                except:
+                    pass  # 不是嵌套JSON，保持原样
+        
         # 确保document_content不为空
-        if not document_content:
-            print(f"[Generate] Warning: document_content is empty, using full response")
+        if not document_content or len(document_content.strip()) < 10:
+            print(f"[Generate] Warning: document_content is empty or too short, using full response")
             document_content = ai_response
             chat_message = "已生成文书内容"
         
         print(f"[Generate] Parsed - chat_message: {len(chat_message)} chars, document_content: {len(document_content)} chars")
+        print(f"[Generate] Document content preview: {document_content[:200]}...")
         
     except json.JSONDecodeError as e:
         print(f"[Generate] JSON解析失败: {e}")
