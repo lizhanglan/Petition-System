@@ -180,7 +180,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { User, ChatDotRound, Loading, Paperclip, Document } from '@element-plus/icons-vue'
 import { getTemplateList } from '@/api/templates'
@@ -215,9 +215,61 @@ const sessionInfo = ref<any>({
 })
 const currentDocumentId = ref<number | null>(null)
 
+// 本地存储的key
+const STORAGE_KEY = 'generate_page_state'
+
 // 生成会话ID
 const generateSessionId = () => {
   return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+}
+
+// 保存状态到localStorage
+const saveState = () => {
+  const state = {
+    sessionId: sessionId.value,
+    selectedTemplateId: selectedTemplateId.value,
+    currentDocumentId: currentDocumentId.value,
+    fileReferences: fileReferences.value,
+    timestamp: Date.now()
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  console.log('[Generate] State saved:', state)
+}
+
+// 从localStorage恢复状态
+const restoreState = () => {
+  try {
+    const savedState = localStorage.getItem(STORAGE_KEY)
+    if (savedState) {
+      const state = JSON.parse(savedState)
+      
+      // 检查状态是否过期（24小时）
+      const isExpired = Date.now() - state.timestamp > 24 * 60 * 60 * 1000
+      if (isExpired) {
+        console.log('[Generate] Saved state expired, creating new session')
+        localStorage.removeItem(STORAGE_KEY)
+        return false
+      }
+      
+      // 恢复状态
+      sessionId.value = state.sessionId
+      selectedTemplateId.value = state.selectedTemplateId
+      currentDocumentId.value = state.currentDocumentId
+      fileReferences.value = state.fileReferences || []
+      
+      console.log('[Generate] State restored:', state)
+      return true
+    }
+  } catch (error) {
+    console.error('[Generate] Failed to restore state:', error)
+  }
+  return false
+}
+
+// 清除保存的状态
+const clearSavedState = () => {
+  localStorage.removeItem(STORAGE_KEY)
+  console.log('[Generate] Saved state cleared')
 }
 
 const loadTemplates = async () => {
@@ -294,6 +346,9 @@ const handleSend = async () => {
     
     generatedContent.value = result.content
     currentDocumentId.value = result.id
+    
+    // 保存状态到localStorage
+    saveState()
     
     // 获取文档预览URL
     if (result.preview_url) {
@@ -380,7 +435,7 @@ const handleSend = async () => {
 
 const handleClearHistory = async () => {
   try {
-    await ElMessageBox.confirm('确定要清除对话历史吗？', '提示', {
+    await ElMessageBox.confirm('确定要清除对话历史吗？这将开始一个新的对话会话。', '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
@@ -395,7 +450,13 @@ const handleClearHistory = async () => {
     fileReferences.value = []
     sessionInfo.value = { message_count: 0, file_reference_count: 0 }
     
-    ElMessage.success('对话历史已清除')
+    // 清除本地存储的状态
+    clearSavedState()
+    
+    // 生成新的会话ID
+    sessionId.value = generateSessionId()
+    
+    ElMessage.success('对话历史已清除，已开始新会话')
   } catch (error) {
     if (error !== 'cancel') {
       console.error(error)
@@ -454,13 +515,31 @@ const handlePreviewError = (error: string) => {
   ElMessage.error('预览加载失败')
 }
 
+// 监听状态变化，自动保存
+watch([selectedTemplateId, fileReferences], () => {
+  if (sessionId.value) {
+    saveState()
+  }
+}, { deep: true })
+
 onMounted(() => {
-  // 生成会话ID
-  sessionId.value = generateSessionId()
+  // 尝试恢复之前的状态
+  const restored = restoreState()
+  
+  // 如果没有恢复状态，生成新的会话ID
+  if (!restored) {
+    sessionId.value = generateSessionId()
+  }
   
   loadTemplates()
   loadFiles()
   loadConversationHistory()
+  
+  // 如果恢复了文档ID，设置预览类型
+  if (currentDocumentId.value) {
+    previewType.value = 'onlyoffice'
+    console.log('[Generate] Restored document ID:', currentDocumentId.value)
+  }
 })
 </script>
 
