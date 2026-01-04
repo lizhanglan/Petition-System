@@ -48,17 +48,71 @@ declare global {
 // 加载ONLYOFFICE API脚本
 const loadOnlyOfficeScript = (): Promise<void> => {
   return new Promise((resolve, reject) => {
+    console.log('[OnlyOffice] Loading API script...')
+    
     // 检查是否已加载
     if (window.DocsAPI) {
+      console.log('[OnlyOffice] API already loaded')
       resolve()
       return
     }
     
+    // 检查是否已有script标签
+    const existingScript = document.querySelector('script[src*="api/documents/api.js"]')
+    if (existingScript) {
+      console.log('[OnlyOffice] Script tag already exists, waiting for load...')
+      // 等待加载完成
+      const checkInterval = setInterval(() => {
+        if (window.DocsAPI) {
+          clearInterval(checkInterval)
+          console.log('[OnlyOffice] API loaded from existing script')
+          resolve()
+        }
+      }, 100)
+      
+      // 10秒超时
+      setTimeout(() => {
+        clearInterval(checkInterval)
+        if (!window.DocsAPI) {
+          reject(new Error('Timeout waiting for ONLYOFFICE API'))
+        }
+      }, 10000)
+      return
+    }
+    
+    console.log('[OnlyOffice] Creating script tag...')
     const script = document.createElement('script')
     script.src = 'http://101.37.24.171:9090/web-apps/apps/api/documents/api.js'
-    script.onload = () => resolve()
-    script.onerror = () => reject(new Error('Failed to load ONLYOFFICE API'))
+    script.type = 'text/javascript'
+    
+    script.onload = () => {
+      console.log('[OnlyOffice] Script loaded successfully')
+      // 等待DocsAPI可用
+      const checkAPI = setInterval(() => {
+        if (window.DocsAPI) {
+          clearInterval(checkAPI)
+          console.log('[OnlyOffice] DocsAPI is ready')
+          resolve()
+        }
+      }, 50)
+      
+      // 5秒超时
+      setTimeout(() => {
+        clearInterval(checkAPI)
+        if (!window.DocsAPI) {
+          reject(new Error('DocsAPI not available after script load'))
+        }
+      }, 5000)
+    }
+    
+    script.onerror = (error) => {
+      console.error('[OnlyOffice] Script load error:', error)
+      reject(new Error('Failed to load ONLYOFFICE API script'))
+    }
+    
+    console.log('[OnlyOffice] Appending script to head...')
     document.head.appendChild(script)
+    console.log('[OnlyOffice] Script tag appended')
   })
 }
 
