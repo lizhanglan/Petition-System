@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS documents (
     structured_content JSONB,
     document_type VARCHAR(50),
     status VARCHAR(20) DEFAULT 'draft',
+    classification VARCHAR(20) DEFAULT 'public',
     ai_annotations JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE
