@@ -102,7 +102,7 @@ async def get_editor_config(
         return config
 
 
-@router.get("/download/file/{file_id}")
+@router.api_route("/download/file/{file_id}", methods=["GET", "HEAD"])
 async def download_file_for_onlyoffice(
     file_id: int,
     request: Request,
@@ -147,6 +147,20 @@ async def download_file_for_onlyoffice(
     content_type = mime_types.get(file.file_type.lower(), 'application/octet-stream')
     print(f"[OnlyOffice] Content type: {content_type}")
     
+    # 如果是HEAD请求，只返回头部信息
+    if request.method == "HEAD":
+        print(f"[OnlyOffice] HEAD request - returning headers only")
+        return StreamingResponse(
+            io.BytesIO(b""),
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+    
     try:
         # 从MinIO下载文件
         print(f"[OnlyOffice] Downloading from MinIO...")
@@ -177,7 +191,7 @@ async def download_file_for_onlyoffice(
         raise HTTPException(status_code=500, detail=f"文件下载失败: {str(e)}")
 
 
-@router.get("/download/document/{document_id}")
+@router.api_route("/download/document/{document_id}", methods=["GET", "HEAD"])
 async def download_document_for_onlyoffice(
     document_id: int,
     request: Request,
@@ -207,16 +221,30 @@ async def download_document_for_onlyoffice(
     print(f"[OnlyOffice] Document found: {document.title}")
     print(f"[OnlyOffice] Storage path: {document.file_path}")
     
+    # 对文件名进行URL编码以支持中文
+    from urllib.parse import quote
+    encoded_filename = quote(f"{document.title}.docx")
+    
+    # 如果是HEAD请求，只返回头部信息
+    if request.method == "HEAD":
+        print(f"[OnlyOffice] HEAD request - returning headers only")
+        return StreamingResponse(
+            io.BytesIO(b""),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+    
     try:
         # 从MinIO下载文书
         print(f"[OnlyOffice] Downloading from MinIO...")
         file_data = await minio_client.download_file(document.file_path)
         
         print(f"[OnlyOffice] SUCCESS: Document downloaded from MinIO, size: {len(file_data)} bytes")
-        
-        # 对文件名进行URL编码以支持中文
-        from urllib.parse import quote
-        encoded_filename = quote(f"{document.title}.docx")
         
         # 返回文件流
         return StreamingResponse(
