@@ -204,19 +204,27 @@ GET    /api/v1/audit-logs/export    # 日志导出
 
 ## 快速开始
 
-### 0. 脚本说明
+### 0. 统一启动脚本（推荐）
 
 项目提供了统一的启动脚本，支持本地开发和Docker部署两种模式。
 
-**推荐使用**：
-- Windows: `run.bat` - 交互式菜单，功能完整
-- Linux/Mac: `./run.sh` - 交互式菜单或命令行模式
+**Windows**：
+```cmd
+run.bat
+```
 
-**传统脚本**（仍可使用）：
-- `start.bat` - Windows本地快速启动
-- `deploy.sh` / `deploy.bat` - Docker快速部署
+**Linux/Mac**：
+```bash
+chmod +x run.sh
+./run.sh
 
-详见 **[scripts/统一启动脚本说明.md](scripts/统一启动脚本说明.md)** 和 **[scripts/README.md](scripts/README.md)**
+# 或使用命令行模式
+./run.sh dev      # 本地开发
+./run.sh docker   # Docker部署
+./run.sh status   # 查看状态
+```
+
+详见 **[统一启动脚本说明](scripts/统一启动脚本说明.md)** 和 **[脚本目录说明](scripts/README.md)**
 
 ### 1. 环境要求
 
@@ -249,13 +257,18 @@ npm install
 
 ### 4. 启动服务
 
-#### 方式 1：使用启动脚本（推荐）
-```bash
-# Windows
-start.bat
+#### 方式 1：使用统一启动脚本（推荐）
 
-# Linux/Mac
-./start.sh
+**Windows**：
+```bash
+run.bat
+```
+然后选择 `[1] 本地开发模式`
+
+**Linux/Mac**：
+```bash
+chmod +x run.sh
+./run.sh dev
 ```
 
 #### 方式 2：手动启动
