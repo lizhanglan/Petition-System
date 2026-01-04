@@ -187,25 +187,44 @@ const initEditor = async () => {
     // 添加事件处理
     config.events = {
       onDocumentReady: () => {
-        console.log('[OnlyOffice] Document ready')
+        console.log('[OnlyOffice] ✅ Document ready - hiding loading')
         loading.value = false
       },
       onError: (event: any) => {
-        console.error('[OnlyOffice] Error:', event)
+        console.error('[OnlyOffice] ❌ Error event:', event)
         error.value = `编辑器错误: ${JSON.stringify(event.data)}`
+        loading.value = false
         emit('error', error.value)
       },
       onWarning: (event: any) => {
-        console.warn('[OnlyOffice] Warning:', event)
+        console.warn('[OnlyOffice] ⚠️  Warning event:', event)
       },
       onInfo: (event: any) => {
-        console.log('[OnlyOffice] Info:', event)
+        console.log('[OnlyOffice] ℹ️  Info event:', event)
+      },
+      onAppReady: () => {
+        console.log('[OnlyOffice] ✅ App ready')
+      },
+      onDocumentStateChange: (event: any) => {
+        console.log('[OnlyOffice] 📄 Document state change:', event)
+      },
+      onRequestEditRights: () => {
+        console.log('[OnlyOffice] 🔒 Request edit rights')
       }
     }
     
     // 初始化编辑器
+    console.log('[OnlyOffice] Creating DocEditor with config:', config)
     editor = new window.DocsAPI.DocEditor('onlyoffice-editor', config)
-    console.log('[OnlyOffice] Editor initialized')
+    console.log('[OnlyOffice] Editor initialized, waiting for events...')
+    
+    // 设置超时，如果30秒后还在loading，强制隐藏
+    setTimeout(() => {
+      if (loading.value) {
+        console.warn('[OnlyOffice] ⚠️  Timeout: Document not ready after 30s, hiding loading anyway')
+        loading.value = false
+      }
+    }, 30000)
     
   } catch (err: any) {
     console.error('[OnlyOffice] Init error:', err)

@@ -230,21 +230,31 @@ const handlePreview = async (row: any) => {
       return
     }
     
+    console.log('[Files] ========== Preview Request ==========')
+    console.log('[Files] File:', row)
+    
     currentFile.value = row
     previewError.value = false
     previewType.value = ''
+    
+    console.log('[Files] Calling getFilePreview...')
     const data: any = await getFilePreview(row.id)
     
-    console.log('[Files] Preview data:', data)
+    console.log('[Files] Preview data received:', data)
+    console.log('[Files] preview_url:', data.preview_url)
+    console.log('[Files] preview_type:', data.preview_type)
     
     if (!data.preview_url) {
+      console.error('[Files] No preview_url in response')
       previewError.value = true
       ElMessage.warning('预览服务暂时不可用')
     } else {
       // 检查是否是ONLYOFFICE预览
       if (data.preview_url === 'use_onlyoffice_component') {
         previewType.value = 'onlyoffice'
-        console.log('[Files] Using ONLYOFFICE component for preview')
+        console.log('[Files] ✅ Setting previewType to "onlyoffice"')
+        console.log('[Files] currentFile:', currentFile.value)
+        console.log('[Files] previewError:', previewError.value)
       } else {
         previewUrl.value = data.preview_url
         previewType.value = 'direct'
@@ -252,9 +262,22 @@ const handlePreview = async (row: any) => {
       }
     }
     
+    console.log('[Files] Opening preview dialog...')
+    console.log('[Files] previewType:', previewType.value)
+    console.log('[Files] previewVisible will be set to true')
     previewVisible.value = true
+    
+    // 延迟检查 DOM
+    setTimeout(() => {
+      const editorElement = document.getElementById('onlyoffice-editor')
+      const loadingElement = document.querySelector('.onlyoffice-editor .loading')
+      console.log('[Files] DOM Check:')
+      console.log('  - onlyoffice-editor element:', editorElement)
+      console.log('  - loading element:', loadingElement)
+      console.log('  - previewType:', previewType.value)
+    }, 100)
   } catch (error) {
-    console.error('Preview error:', error)
+    console.error('[Files] Preview error:', error)
     previewError.value = true
     previewVisible.value = true
   }
