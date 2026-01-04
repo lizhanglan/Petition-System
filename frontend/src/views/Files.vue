@@ -71,26 +71,34 @@
       </el-table>
     </el-card>
     
-    <el-dialog v-model="previewVisible" title="文件预览" width="80%" :fullscreen="true">
-      <!-- ONLYOFFICE预览 -->
-      <OnlyOfficeEditor
-        v-if="previewType === 'onlyoffice' && currentFile && !previewError"
-        :file-id="currentFile.id"
-        mode="view"
-        height="80vh"
-        @error="handlePreviewError"
-      />
-      
-      <!-- 其他预览方式 -->
-      <div v-else-if="previewUrl && !previewError">
-        <iframe :src="previewUrl" style="width: 100%; height: 80vh; border: none;" @error="handlePreviewError" />
-      </div>
-      
-      <!-- 错误提示 -->
-      <div v-else class="preview-error">
-        <el-empty description="无法预览该文件，可能是预览服务暂时不可用">
-          <el-button type="primary" @click="handleDownloadCurrent">下载文件</el-button>
-        </el-empty>
+    <el-dialog 
+      v-model="previewVisible" 
+      title="文件预览" 
+      width="90%" 
+      :fullscreen="true"
+      class="preview-dialog"
+    >
+      <div class="preview-container">
+        <!-- ONLYOFFICE预览 -->
+        <OnlyOfficeEditor
+          v-if="previewType === 'onlyoffice' && currentFile && !previewError"
+          :file-id="currentFile.id"
+          mode="view"
+          height="calc(100vh - 120px)"
+          @error="handlePreviewError"
+        />
+        
+        <!-- 其他预览方式 -->
+        <div v-else-if="previewUrl && !previewError" class="iframe-container">
+          <iframe :src="previewUrl" @error="handlePreviewError" />
+        </div>
+        
+        <!-- 错误提示 -->
+        <div v-else class="preview-error">
+          <el-empty description="无法预览该文件，可能是预览服务暂时不可用">
+            <el-button type="primary" @click="handleDownloadCurrent">下载文件</el-button>
+          </el-empty>
+        </div>
       </div>
     </el-dialog>
     
@@ -375,10 +383,39 @@ onMounted(() => {
   gap: 10px;
 }
 
+.preview-container {
+  width: 100%;
+  height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+}
+
+.iframe-container {
+  width: 100%;
+  height: 100%;
+}
+
+.iframe-container iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
 .preview-error {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 80vh;
+  height: 100%;
+}
+
+/* 优化预览对话框样式 */
+:deep(.preview-dialog .el-dialog__body) {
+  padding: 0 !important;
+  height: calc(100vh - 60px);
+}
+
+:deep(.preview-dialog .el-dialog__header) {
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
 }
 </style>
