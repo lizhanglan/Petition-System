@@ -20,7 +20,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             # 1. 进入服务器项目目录
-            cd ~/lizhanglan/petition_system
+            cd ~/lizhanglan/Petition-System
             
             # 2. 拉取 GitHub 最新代码
             git pull origin main
