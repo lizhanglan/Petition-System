@@ -486,11 +486,57 @@ const handleSave = () => {
   }
 }
 
-const handleDownload = () => {
-  if (currentDocumentId.value) {
-    window.open(`/api/v1/documents/${currentDocumentId.value}/download?format=pdf`, '_blank')
-  } else {
+const handleDownload = async () => {
+  if (!currentDocumentId.value) {
     ElMessage.warning('没有可下载的文书')
+    return
+  }
+  
+  try {
+    // 获取token
+    const token = localStorage.getItem('token')
+    if (!token) {
+      ElMessage.error('未登录，请先登录')
+      return
+    }
+    
+    // 使用fetch下载，携带token
+    const response = await fetch(`/api/v1/documents/${currentDocumentId.value}/download?format=pdf`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    
+    if (!response.ok) {
+      throw new Error(`下载失败: ${response.status}`)
+    }
+    
+    // 获取文件名
+    const contentDisposition = response.headers.get('Content-Disposition')
+    let filename = 'document.pdf'
+    if (contentDisposition) {
+      const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition)
+      if (matches && matches[1]) {
+        filename = matches[1].replace(/['"]/g, '')
+      }
+    }
+    
+    // 创建blob并下载
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+    
+    ElMessage.success('下载成功')
+  } catch (error: any) {
+    console.error('Download error:', error)
+    ElMessage.error(`下载失败: ${error.message}`)
   }
 }
 

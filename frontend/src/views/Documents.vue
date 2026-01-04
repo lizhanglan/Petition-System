@@ -339,29 +339,46 @@ const handleDownload = async () => {
   if (!currentDocument.value) return
   
   try {
-    const response = await fetch(`http://localhost:8000/api/v1/documents/${currentDocument.value.id}/export?format=docx`, {
+    const token = localStorage.getItem('token')
+    if (!token) {
+      ElMessage.error('未登录，请先登录')
+      return
+    }
+    
+    const response = await fetch(`/api/v1/documents/${currentDocument.value.id}/download?format=pdf`, {
+      method: 'GET',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${token}`
       }
     })
     
-    if (response.ok) {
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${currentDocument.value.title}.docx`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-      ElMessage.success('文书下载成功')
-    } else {
-      throw new Error('下载失败')
+    if (!response.ok) {
+      throw new Error(`下载失败: ${response.status}`)
     }
-  } catch (error) {
+    
+    // 获取文件名
+    const contentDisposition = response.headers.get('Content-Disposition')
+    let filename = `${currentDocument.value.title}.pdf`
+    if (contentDisposition) {
+      const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition)
+      if (matches && matches[1]) {
+        filename = matches[1].replace(/['"]/g, '')
+      }
+    }
+    
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+    ElMessage.success('文书下载成功')
+  } catch (error: any) {
     console.error('Download error:', error)
-    ElMessage.error('文书下载失败')
+    ElMessage.error(`文书下载失败: ${error.message}`)
   }
 }
 
