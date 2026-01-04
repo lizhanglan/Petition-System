@@ -204,6 +204,15 @@ GET    /api/v1/audit-logs/export    # 日志导出
 
 ## 快速开始
 
+### 0. 脚本说明
+
+项目提供了多个便捷脚本，详见 **[scripts/README.md](scripts/README.md)**
+
+**常用脚本**：
+- `start.bat` - Windows本地启动（开发环境）
+- `deploy.sh` - Linux/Mac本地部署
+- `scripts/deployment/deploy-cloud.sh` - 云服务器部署
+
 ### 1. 环境要求
 
 - Python 3.12+
