@@ -11,19 +11,20 @@
         </div>
       </template>
       
-      <el-row :gutter="20">
-        <el-col :span="16">
+      <el-row :gutter="20" class="review-row">
+        <el-col :span="16" class="preview-col">
           <div class="preview-area">
             <h3>文件预览</h3>
             
             <!-- ONLYOFFICE预览 -->
-            <OnlyOfficeEditor
-              v-if="previewType === 'onlyoffice' && fileId && !previewError"
-              :file-id="fileId"
-              mode="view"
-              height="calc(100vh - 280px)"
-              @error="handlePreviewError"
-            />
+            <div v-if="previewType === 'onlyoffice' && fileId && !previewError" class="preview-container">
+              <OnlyOfficeEditor
+                :file-id="fileId"
+                mode="view"
+                height="100%"
+                @error="handlePreviewError"
+              />
+            </div>
             
             <!-- 其他预览方式 -->
             <div v-else-if="previewUrl && !previewError">
@@ -303,7 +304,34 @@ onUnmounted(() => {
   align-items: center;
 }
 
-.preview-area h3,
+.review-row {
+  height: calc(100vh - 200px);
+}
+
+.preview-col {
+  height: 100%;
+}
+
+.preview-area {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-area h3 {
+  margin-bottom: 15px;
+  color: #333;
+  flex-shrink: 0;
+}
+
+.preview-container {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
 .review-panel h3 {
   margin-bottom: 15px;
   color: #333;
@@ -328,7 +356,7 @@ onUnmounted(() => {
 }
 
 .review-panel {
-  height: calc(100vh - 280px);
+  height: calc(100vh - 200px);
   overflow-y: auto;
   padding: 20px;
   background-color: #f5f5f5;
