@@ -604,13 +604,13 @@ def _fill_template(template_content: str, structured_data: dict, ai_content: str
     Args:
         template_content: 模板内容（可能包含占位符）
         structured_data: 结构化数据
-        ai_content: AI 生成的内容
+        ai_content: AI 生成的纯文本内容（已按公文格式编排）
         
     Returns:
         填充后的完整内容
     """
     if not template_content:
-        # 如果没有模板内容，直接返回 AI 生成的内容
+        # 如果没有模板内容，直接返回 AI 生成的内容（已格式化）
         return ai_content
     
     # 替换占位符
