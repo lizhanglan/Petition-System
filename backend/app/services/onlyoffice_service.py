@@ -106,14 +106,13 @@ class OnlyOfficeService:
             "editorConfig": {
                 "mode": mode,
                 "lang": "zh-CN",
-                "callbackUrl": f"{self.callback_url}?fileId={file_id}&type=file",
                 "user": {
                     "id": str(user_id),
                     "name": user_name
                 },
                 "customization": {
-                    "autosave": True,
-                    "forcesave": True,
+                    "autosave": mode == 'edit',  # 只在编辑模式启用自动保存
+                    "forcesave": False,  # 禁用强制保存
                     "comments": mode == 'edit',
                     "chat": False,
                     "compactHeader": False,
@@ -126,6 +125,10 @@ class OnlyOfficeService:
                 }
             }
         }
+        
+        # 只在编辑模式添加回调URL
+        if mode == 'edit':
+            config["editorConfig"]["callbackUrl"] = f"{self.callback_url}?fileId={file_id}&type=file"
         
         return config
     
@@ -189,14 +192,13 @@ class OnlyOfficeService:
             "editorConfig": {
                 "mode": mode,
                 "lang": "zh-CN",
-                "callbackUrl": f"{self.callback_url}?documentId={document_id}&type=document",
                 "user": {
                     "id": str(user_id),
                     "name": user_name
                 },
                 "customization": {
-                    "autosave": True,
-                    "forcesave": True,
+                    "autosave": mode == 'edit',
+                    "forcesave": False,
                     "comments": mode == 'edit',
                     "chat": False,
                     "compactHeader": False,
@@ -209,6 +211,10 @@ class OnlyOfficeService:
                 }
             }
         }
+        
+        # 只在编辑模式添加回调URL
+        if mode == 'edit':
+            config["editorConfig"]["callbackUrl"] = f"{self.callback_url}?documentId={document_id}&type=document"
         
         return config
     
