@@ -80,11 +80,13 @@ class OnlyOfficeService:
         # 获取文档类型
         document_type = self.get_document_type(file_type)
         
-        # 使用后端代理URL（ONLYOFFICE通过后端下载文件）
-        file_url = f"{self.backend_public_url}/api/v1/onlyoffice/download/file/{file_id}"
+        # 使用后端代理URL
+        # 注意：ONLYOFFICE服务器通过Docker内部网络访问后端
+        # 使用容器名 petition-backend 而不是公网IP
+        file_url = f"http://petition-backend:8000/api/v1/onlyoffice/download/file/{file_id}"
         
         print(f"[OnlyOfficeService] Generated file URL: {file_url}")
-        print(f"  - backend_public_url: {self.backend_public_url}")
+        print(f"  - Using Docker internal network")
         print(f"  - file_id: {file_id}")
         
         # 配置（无JWT版本，更简单）
@@ -166,11 +168,12 @@ class OnlyOfficeService:
         # 获取文档类型
         document_type = self.get_document_type(file_type)
         
-        # 使用后端代理URL（ONLYOFFICE通过后端下载文档）
-        file_url = f"{self.backend_public_url}/api/v1/onlyoffice/download/document/{document_id}"
+        # 使用后端代理URL
+        # 注意：ONLYOFFICE服务器通过Docker内部网络访问后端
+        file_url = f"http://petition-backend:8000/api/v1/onlyoffice/download/document/{document_id}"
         
         print(f"[OnlyOfficeService] Generated document URL: {file_url}")
-        print(f"  - backend_public_url: {self.backend_public_url}")
+        print(f"  - Using Docker internal network")
         print(f"  - document_id: {document_id}")
         
         # 配置（无JWT版本）
