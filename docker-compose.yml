@@ -100,7 +100,7 @@ services:
       DEEPSEEK_API_BASE: ${DEEPSEEK_API_BASE:-https://api.deepseek.com}
       
       # ========== 华为云Office配置 - 修复字段名+补全所有必填项 ✅ ==========
-      OFFICE_HTTP: ${OFFICE_HTTP:-https://officeweb365.apistore.huaweicloud.com/v2/gateway/fileurl}
+      OFFICE_HTTP: ${OFFICE_HTTP:-https://api.deepseek.com}
       OFFICE_API_KEY: ${OFFICE_API_KEY:-}
       OFFICE_APP_SECRET: ${OFFICE_APP_SECRET:-}
       OFFICE_MCP_APP_CODE: ${OFFICE_MCP_APP_CODE:-}
@@ -110,6 +110,7 @@ services:
       ENVIRONMENT: production
       DEBUG: "false"
     volumes:
+      - ./backend/app:/app/app  # 挂载代码目录，支持热更新
       - ./backend/logs:/app/logs
       - ./backend/uploads:/app/uploads
       - ./backend/config:/app/config
