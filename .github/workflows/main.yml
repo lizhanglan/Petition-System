@@ -28,6 +28,9 @@ jobs:
             # 3. 重新构建并启动有变动的镜像（后端或前端）
             # --build 会自动识别代码变动
             # --no-cache 强制重新构建，避免缓存问题
+            docker-compose stop frontend
+            docker-compose rm -f frontend
+            docker rmi petition-system-frontend
             docker-compose build --no-cache
             docker-compose up -d
             
