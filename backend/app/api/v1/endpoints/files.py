@@ -320,6 +320,47 @@ async def get_file_preview(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"预览失败: {str(e)}")
 
+@router.get("/{file_id}/content")
+async def get_file_content(
+    file_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """获取文件内容（用于前端预览）"""
+    from fastapi.responses import Response
+    
+    result = await db.execute(
+        select(File).where(File.id == file_id, File.user_id == current_user.id)
+    )
+    file = result.scalar_one_or_none()
+    
+    if not file:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    
+    # 从 MinIO 下载文件内容
+    file_bytes = await minio_client.download_file(file.storage_path)
+    if not file_bytes:
+        raise HTTPException(status_code=500, detail="无法读取文件内容")
+    
+    # 确定 content-type
+    content_type_map = {
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'doc': 'application/msword',
+        'pdf': 'application/pdf',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'xls': 'application/vnd.ms-excel',
+    }
+    content_type = content_type_map.get(file.file_type.lower(), 'application/octet-stream')
+    
+    return Response(
+        content=file_bytes,
+        media_type=content_type,
+        headers={
+            'Content-Disposition': f'inline; filename="{file.file_name}"',
+            'Access-Control-Expose-Headers': 'Content-Disposition'
+        }
+    )
+
 @router.get("/{file_id}/download")
 async def download_file_by_id(
     file_id: int,

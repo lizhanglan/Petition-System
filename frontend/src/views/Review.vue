@@ -16,23 +16,21 @@
           <div class="preview-area">
             <h3>文件预览</h3>
             
-            <!-- ONLYOFFICE预览 -->
-            <div v-if="previewType === 'onlyoffice' && fileId && !previewError" class="preview-container">
-              <OnlyOfficeEditor
+            <!-- DOCX预览 -->
+            <div v-if="isDocxFile && fileId && !previewError" class="preview-container">
+              <DocxPreview
                 :file-id="fileId"
-                mode="view"
-                height="100%"
                 @error="handlePreviewError"
+                @loaded="handlePreviewLoaded"
               />
             </div>
             
-            <!-- 其他预览方式 -->
-            <div v-else-if="previewUrl && !previewError">
+            <!-- PDF 使用 iframe -->
+            <div v-else-if="isPdfFile && previewUrl && !previewError">
               <iframe 
                 :src="previewUrl" 
                 class="preview-iframe" 
                 @error="handlePreviewError"
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
               />
             </div>
             
@@ -49,6 +47,16 @@
                     重新加载
                   </el-button>
                 </el-space>
+              </el-empty>
+            </div>
+            
+            <!-- 不支持的格式 -->
+            <div v-else-if="!isDocxFile && !isPdfFile && fileType" class="preview-error">
+              <el-empty description="该文件格式暂不支持在线预览">
+                <el-button type="primary" @click="downloadFile">
+                  <el-icon><Download /></el-icon>
+                  下载文件查看
+                </el-button>
               </el-empty>
             </div>
             
@@ -110,14 +118,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Download, Refresh } from '@element-plus/icons-vue'
 import { getFilePreview } from '@/api/files'
 import { reviewDocument } from '@/api/documents'
 import { ElMessage } from 'element-plus'
 import FallbackNotice from '@/components/FallbackNotice.vue'
-import OnlyOfficeEditor from '@/components/OnlyOfficeEditor.vue'
+import DocxPreview from '@/components/DocxPreview.vue'
 
 const route = useRoute()
 const fileId = Number(route.params.fileId)
@@ -130,6 +138,16 @@ const fileName = ref('')
 const fileType = ref('')
 const reviewResult = ref<any>(null)
 const fileUrl = ref('')
+
+// 判断文件类型
+const isDocxFile = computed(() => {
+  const ext = fileType.value.toLowerCase()
+  return ext === 'docx' || ext === 'doc'
+})
+
+const isPdfFile = computed(() => {
+  return fileType.value.toLowerCase() === 'pdf'
+})
 
 // 捕获 iframe 内部的错误，避免显示在控制台
 const handleWindowError = (event: ErrorEvent) => {
@@ -218,6 +236,10 @@ const loadPreview = async () => {
 const handlePreviewError = () => {
   previewError.value = true
   ElMessage.warning('预览加载失败，请尝试下载文件查看')
+}
+
+const handlePreviewLoaded = () => {
+  console.log('[Review] Document preview loaded successfully')
 }
 
 const downloadFile = () => {

@@ -16,3 +16,6 @@ htmlcov/
 .env
 .env.local
 *.log
+
+Pipfile
+Pipfile.lock

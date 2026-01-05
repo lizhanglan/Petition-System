@@ -33,15 +33,20 @@ CREATE TABLE IF NOT EXISTS files (
 
 CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id);
 
--- 模板表
+-- 模板表（支持 Word 模板）
 CREATE TABLE IF NOT EXISTS templates (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id),
     name VARCHAR(255) NOT NULL,
     document_type VARCHAR(50) NOT NULL,
-    structure JSONB NOT NULL,
-    content_template TEXT,
+    -- Word 模板文件路径（新字段）
+    template_file_path VARCHAR(500),
+    original_file_path VARCHAR(500),
+    -- 字段定义
     fields JSONB,
+    -- 兼容旧字段（可为空）
+    structure JSONB,
+    content_template TEXT,
     is_active BOOLEAN DEFAULT TRUE,
     version INTEGER DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

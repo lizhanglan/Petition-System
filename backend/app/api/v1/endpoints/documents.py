@@ -350,6 +350,10 @@ async def generate_document(
     
     print(f"[Generate] Template found: {template.name}")
     
+    # 检查是否是新的 Word 模板系统
+    use_word_template = bool(template.template_file_path)
+    print(f"[Generate] Using Word template system: {use_word_template}")
+    
     # 准备模板信息
     template_info = {
         "name": template.name,
@@ -388,6 +392,165 @@ async def generate_document(
                     if parsed_data and parsed_data.get('text'):
                         file_context += f"\n\n--- 参考文件：{file.file_name} ---\n{parsed_data['text'][:1000]}"  # 限制长度
     
+    # 根据模板类型选择不同的生成方式
+    if use_word_template:
+        # 新的 Word 模板系统 - 使用 docxtpl 渲染
+        return await _generate_with_word_template(
+            request, template, context, file_context, current_user, db
+        )
+    else:
+        # 兼容旧的 JSON 模板系统
+        return await _generate_with_json_template(
+            request, template, template_info, context, file_context, current_user, db
+        )
+
+
+async def _generate_with_word_template(
+    request: DocumentGenerateRequest,
+    template,
+    context: list,
+    file_context: str,
+    current_user,
+    db: AsyncSession
+):
+    """使用 Word 模板系统生成文书"""
+    from app.services.docx_render_service import docx_render_service
+    
+    # 调用 AI 生成字段值
+    ai_result = await deepseek_service.generate_field_values(
+        fields=template.fields or {},
+        prompt=request.prompt,
+        context=context
+    )
+    
+    if not ai_result or not ai_result.get("success"):
+        conversation_service.add_message(
+            user_id=current_user.id,
+            role="assistant",
+            content="抱歉，生成失败，请稍后重试。",
+            session_id=request.session_id
+        )
+        raise HTTPException(status_code=500, detail="AI 生成失败，请稍后重试")
+    
+    chat_message = ai_result.get("chat_message", "已生成文书")
+    field_values = ai_result.get("field_values", {})
+    is_complete = ai_result.get("complete", False)
+    
+    print(f"[Generate] AI returned {len(field_values)} field values, complete: {is_complete}")
+    
+    # 添加 AI 回复到对话历史
+    conversation_service.add_message(
+        user_id=current_user.id,
+        role="assistant",
+        content=chat_message,
+        session_id=request.session_id,
+        metadata={
+            "field_values": field_values,
+            "complete": is_complete
+        }
+    )
+    
+    # 下载模板文件
+    template_bytes = await minio_client.download_file(template.template_file_path)
+    if not template_bytes:
+        raise HTTPException(status_code=500, detail="模板文件加载失败")
+    
+    # 使用 docxtpl 渲染模板
+    try:
+        rendered_bytes = await docx_render_service.render_template(
+            template_bytes=template_bytes,
+            context=field_values
+        )
+        print(f"[Generate] Template rendered successfully: {len(rendered_bytes)} bytes")
+    except Exception as e:
+        print(f"[Generate] Template render error: {e}")
+        raise HTTPException(status_code=500, detail=f"模板渲染失败: {str(e)}")
+    
+    # 保存渲染后的文档到 MinIO
+    doc_filename = f"generated/{current_user.id}/{datetime.now().strftime('%Y%m%d%H%M%S')}_{template.name}.docx"
+    await minio_client.upload_file(
+        doc_filename,
+        rendered_bytes,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    
+    # 创建文档记录
+    document = Document(
+        user_id=current_user.id,
+        template_id=template.id,
+        title=f"{template.name}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        content=json.dumps(field_values, ensure_ascii=False),  # 存储字段值作为内容
+        structured_content=field_values,
+        document_type=template.document_type,
+        status="draft"
+    )
+    db.add(document)
+    
+    # 记录审计日志
+    audit_log = AuditLog(
+        user_id=current_user.id,
+        action="generate",
+        resource_type="document",
+        details={
+            "template_id": template.id,
+            "template_name": template.name,
+            "prompt_length": len(request.prompt),
+            "field_count": len(field_values),
+            "session_id": request.session_id,
+            "use_word_template": True
+        }
+    )
+    db.add(audit_log)
+    
+    await db.commit()
+    await db.refresh(document)
+    
+    # 创建初始版本
+    from app.models.version import Version
+    version = Version(
+        document_id=document.id,
+        user_id=current_user.id,
+        version_number=1,
+        content=json.dumps(field_values, ensure_ascii=False),
+        structured_content=field_values,
+        change_description="初始版本 - AI 生成完成",
+        is_rollback=0
+    )
+    db.add(version)
+    await db.commit()
+    
+    # 更新文档存储路径（可选，用于后续下载）
+    document.content = doc_filename  # 临时存储文件路径
+    await db.commit()
+    
+    print(f"[Generate] Document created with ID: {document.id}")
+    
+    return DocumentResponse(
+        id=document.id,
+        title=document.title,
+        content=document.content,
+        document_type=document.document_type,
+        status=document.status,
+        ai_annotations={
+            "chat_message": chat_message,
+            "field_values": field_values,
+            "complete": is_complete
+        },
+        preview_url=None,  # 使用前端 docx-preview 组件
+        created_at=document.created_at
+    )
+
+
+async def _generate_with_json_template(
+    request: DocumentGenerateRequest,
+    template,
+    template_info: dict,
+    context: list,
+    file_context: str,
+    current_user,
+    db: AsyncSession
+):
+    """使用旧的 JSON 模板系统生成文书（兼容模式）"""
     # 调用 AI 生成
     print(f"[Generate] Calling AI with prompt length: {len(request.prompt)}")
     ai_response = await deepseek_service.generate_document(
@@ -511,7 +674,7 @@ async def generate_document(
             "content_length": len(final_content),
             "session_id": request.session_id,
             "context_messages": len(context),
-            "file_references": len(file_refs) if file_refs else 0
+            "file_references": len(conversation_service.get_file_references(current_user.id, request.session_id) or [])
         }
     )
     db.add(audit_log)
@@ -520,6 +683,7 @@ async def generate_document(
     await db.refresh(document)
     
     # 创建初始版本（版本 1）
+    from app.models.version import Version
     version = Version(
         document_id=document.id,
         user_id=current_user.id,
@@ -753,39 +917,64 @@ async def download_document(
     
     print(f"[Download] Exporting document ID: {document_id}, format: {format}")
     
-    # 准备导出内容
     content = document.content
+    file_bytes = None
     
-    # 如果需要保留 AI 标注
-    if include_annotations and document.ai_annotations:
-        annotations = document.ai_annotations
-        if isinstance(annotations, dict) and annotations.get('errors'):
-            content += "\n\n--- AI 研判意见 ---\n"
-            for idx, error in enumerate(annotations['errors'], 1):
-                content += f"\n{idx}. {error.get('description', '')}"
-                if error.get('suggestion'):
-                    content += f"\n   建议：{error['suggestion']}"
+    # 检查 content 是否为 MinIO 文件路径（Word 模板生成的文档）
+    if content and content.startswith("generated/") and content.endswith(".docx"):
+        print(f"[Download] Detected MinIO file path: {content}")
+        # 直接从 MinIO 获取文件
+        stored_bytes = await minio_client.download_file(content)
+        if stored_bytes:
+            if format == 'docx':
+                # 直接返回存储的 DOCX 文件
+                file_bytes = stored_bytes
+            else:
+                # 需要转换为 PDF，暂时使用 export_service
+                # TODO: 实现真正的 PDF 转换
+                structured_data = document.structured_content or {}
+                text_content = "\n".join([f"{k}: {v}" for k, v in structured_data.items()])
+                file_bytes = await document_export_service.export_document(
+                    content=text_content,
+                    title=document.title,
+                    format=format,
+                    options={}
+                )
+        else:
+            print(f"[Download] Failed to download from MinIO, falling back to export")
     
-    # 准备导出选项
-    export_options = {}
-    
-    if include_watermark:
-        export_options['watermark'] = "信访智能文书生成系统"
-    
-    if security_level:
-        export_options['security_level'] = security_level
-    
-    # 导出文档
-    try:
-        file_bytes = await document_export_service.export_document(
-            content=content,
-            title=document.title,
-            format=format,
-            options=export_options
-        )
-    except Exception as e:
-        print(f"[Download] Export error: {e}")
-        raise HTTPException(status_code=500, detail=f"文档导出失败: {str(e)}")
+    # 如果没有从 MinIO 获取到文件，使用传统方式导出
+    if not file_bytes:
+        # 如果需要保留 AI 标注
+        if include_annotations and document.ai_annotations:
+            annotations = document.ai_annotations
+            if isinstance(annotations, dict) and annotations.get('errors'):
+                content += "\n\n--- AI 研判意见 ---\n"
+                for idx, error in enumerate(annotations['errors'], 1):
+                    content += f"\n{idx}. {error.get('description', '')}"
+                    if error.get('suggestion'):
+                        content += f"\n   建议：{error['suggestion']}"
+        
+        # 准备导出选项
+        export_options = {}
+        
+        if include_watermark:
+            export_options['watermark'] = "信访智能文书生成系统"
+        
+        if security_level:
+            export_options['security_level'] = security_level
+        
+        # 导出文档
+        try:
+            file_bytes = await document_export_service.export_document(
+                content=content,
+                title=document.title,
+                format=format,
+                options=export_options
+            )
+        except Exception as e:
+            print(f"[Download] Export error: {e}")
+            raise HTTPException(status_code=500, detail=f"文档导出失败: {str(e)}")
     
     # 记录审计日志
     audit_log = AuditLog(

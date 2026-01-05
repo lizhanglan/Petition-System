@@ -131,25 +131,13 @@
           </template>
           
           <div class="preview-container">
-            <!-- ONLYOFFICE预览 - 可编辑模式 -->
-            <OnlyOfficeEditor
-              v-if="previewType === 'onlyoffice' && currentDocumentId"
+            <!-- Docx 预览 -->
+            <DocxPreview
+              v-if="currentDocumentId"
               :document-id="currentDocumentId"
-              mode="edit"
-              height="calc(100vh - 240px)"
               @error="handlePreviewError"
+              @loaded="handlePreviewLoaded"
             />
-            
-            <!-- 文档预览iframe -->
-            <div v-else-if="previewUrl" class="document-preview">
-              <iframe 
-                :src="previewUrl" 
-                frameborder="0" 
-                width="100%" 
-                height="100%"
-                style="border-radius: 4px;"
-              ></iframe>
-            </div>
             
             <!-- 空状态 -->
             <el-empty v-else description="暂无生成内容">
@@ -202,7 +190,7 @@ import {
 } from '@/api/documents'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import FallbackNotice from '@/components/FallbackNotice.vue'
-import OnlyOfficeEditor from '@/components/OnlyOfficeEditor.vue'
+import DocxPreview from '@/components/DocxPreview.vue'
 
 const route = useRoute()
 const templates = ref<any[]>([])
@@ -570,6 +558,10 @@ const formatDate = (date: string) => {
 const handlePreviewError = (error: string) => {
   console.error('[Generate] Preview error:', error)
   ElMessage.error('预览加载失败')
+}
+
+const handlePreviewLoaded = () => {
+  console.log('[Generate] Document preview loaded successfully')
 }
 
 // 监听状态变化，自动保存

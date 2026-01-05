@@ -70,12 +70,12 @@ if not exist .env (
 )
 
 REM 检查后端依赖
-if not exist backend\venv (
+if not exist backend\Pipfile (
     echo [INFO] 创建 Python 虚拟环境...
     cd backend
-    python -m venv venv
-    call venv\Scripts\activate
-    pip install -r requirements.txt
+    python -m pipenv install
+    python -m pipenv shell
+    pip install -r requirements.txt -i https://mirrors.cloud.tencent.com/pypi/simple
     cd ..
 )
 
@@ -83,7 +83,7 @@ REM 检查前端依赖
 if not exist frontend\node_modules (
     echo [INFO] 安装前端依赖...
     cd frontend
-    call npm install
+    call pnpm install
     cd ..
 )
 

@@ -256,5 +256,182 @@ class DeepSeekService:
         ]
         
         return await self.call_with_retry(messages, temperature=0.3)
+    
+    async def identify_template_fields(self, document_text: str) -> Optional[Dict[str, Any]]:
+        """
+        识别文档中的可变字段并生成占位符映射
+        
+        Args:
+            document_text: 文档纯文本内容
+            
+        Returns:
+            包含 fields 和 replacements 的字典
+        """
+        system_prompt = """你是信访文书模板分析专家。请分析文档内容，识别其中可能需要替换的可变字段（如姓名、日期、编号、单位名称等）。
+
+**重要：必须严格按照以下 JSON 格式返回，不要添加任何其他文字：**
+
+{
+  "fields": {
+    "variable_name": {
+      "label": "中文字段名",
+      "type": "text",
+      "required": true,
+      "description": "字段说明"
+    }
+  },
+  "replacements": {
+    "原文中的完整占位符": "{{ variable_name }}"
+  }
+}
+
+**关键规则：**
+1. variable_name 必须使用英文命名（如 petitioner_name, petition_date）
+2. 占位符格式必须是 {{ variable_name }}（注意两边有空格）
+3. **日期必须作为完整模式识别**：
+   - 如果文档中有 "xx年xx月xx日" 或 "xxxx年xx月xx日"，应该将整个日期模式作为一个替换项
+   - 例如："xx年xx月xx日" -> "{{ date }}"，而不是把 "xx" 单独替换
+   - 同理："xxxx年xx月xx日" -> "{{ date }}"
+4. **区分不同位置的相同占位符**：
+   - 如果 "xx" 在不同位置表示不同含义（如姓名 vs 日期的年/月/日），应该识别完整的上下文模式
+   - 姓名示例："xx（先生/女士）" 或 "xx先生" 整体替换
+5. 识别以下类型的可变内容：
+   - 人名（信访人、承办人等）
+   - 日期（完整的日期格式，如 "xx年xx月xx日"）
+   - 编号（信访编号、受理编号等）
+   - 单位名称（承办单位、主管部门等）
+6. 只识别确定需要替换的内容，固定模板文字不要替换
+7. type 可选值：text, date, number
+
+**示例1 - 完整日期：**
+文档内容："将于xx年xx月xx日前办结"
+应返回：
+{
+  "fields": {
+    "deadline_date": {"label": "办结日期", "type": "date", "required": true}
+  },
+  "replacements": {
+    "xx年xx月xx日": "{{ deadline_date }}"
+  }
+}
+
+**示例2 - 区分姓名和日期：**
+文档内容："xx（先生/女士）：您于xx年xx月xx日提出的信访事项..."
+应返回：
+{
+  "fields": {
+    "petitioner_name": {"label": "信访人姓名", "type": "text", "required": true},
+    "petition_date": {"label": "信访日期", "type": "date", "required": true}
+  },
+  "replacements": {
+    "xx（先生/女士）": "{{ petitioner_name }}",
+    "xx年xx月xx日": "{{ petition_date }}"
+  }
+}"""
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"请分析以下文档并识别可变字段：\n\n{document_text[:4000]}"}  # 限制长度
+        ]
+        
+        result = await self.call_with_retry(messages, temperature=0.3)
+        
+        if result:
+            # 清理可能的 markdown 代码块标记
+            result = result.strip()
+            if result.startswith('```json'):
+                result = result[7:]
+            if result.startswith('```'):
+                result = result[3:]
+            if result.endswith('```'):
+                result = result[:-3]
+            result = result.strip()
+            
+            try:
+                import json
+                data = json.loads(result)
+                data["success"] = True
+                return data
+            except json.JSONDecodeError as e:
+                print(f"[DeepSeek] JSON parse error: {e}")
+                return {"success": False, "error": "AI 返回格式错误"}
+        
+        return {"success": False, "error": "AI 调用失败"}
+    
+    async def generate_field_values(
+        self, 
+        fields: Dict[str, Any], 
+        prompt: str, 
+        context: list = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        根据用户需求和对话上下文生成字段值
+        
+        Args:
+            fields: 模板字段定义
+            prompt: 用户输入的需求
+            context: 对话历史
+            
+        Returns:
+            字段值字典
+        """
+        # 构建字段说明
+        field_descriptions = []
+        for name, info in fields.items():
+            label = info.get("label", name)
+            field_type = info.get("type", "text")
+            required = "必填" if info.get("required") else "选填"
+            field_descriptions.append(f"- {name} ({label}): {field_type}, {required}")
+        
+        system_prompt = f"""你是信访文书生成助手。根据用户需求生成文书字段值。
+
+**需要填写的字段：**
+{chr(10).join(field_descriptions)}
+
+**重要：必须严格按照以下 JSON 格式返回，不要添加任何其他文字：**
+
+{{
+  "chat_message": "对话回复（告诉用户生成了什么、还需要什么信息）",
+  "field_values": {{
+    "field_name": "字段值",
+    ...
+  }},
+  "complete": true/false
+}}
+
+**规则：**
+1. field_values 中的 key 必须和字段定义中的 variable_name 完全一致
+2. 如果用户提供的信息不足以填写所有必填字段，在 chat_message 中询问
+3. complete 表示是否所有必填字段都已填写
+4. 日期格式使用：XXXX年XX月XX日"""
+        
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        if context:
+            messages.extend(context[-10:])  # 最多保留10条历史
+        
+        messages.append({"role": "user", "content": prompt})
+        
+        result = await self.call_with_retry(messages, temperature=0.7)
+        
+        if result:
+            result = result.strip()
+            if result.startswith('```json'):
+                result = result[7:]
+            if result.startswith('```'):
+                result = result[3:]
+            if result.endswith('```'):
+                result = result[:-3]
+            result = result.strip()
+            
+            try:
+                import json
+                data = json.loads(result)
+                data["success"] = True
+                return data
+            except json.JSONDecodeError:
+                return {"success": False, "error": "AI 返回格式错误"}
+        
+        return {"success": False, "error": "AI 调用失败"}
 
 deepseek_service = DeepSeekService()

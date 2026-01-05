@@ -23,3 +23,5 @@ slowapi==0.1.9
 watchdog==3.0.0
 psycopg[binary]==3.1.16
 email-validator>=2.0.0
+psycopg2
+docxtpl==0.16.7

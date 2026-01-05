@@ -14,7 +14,7 @@ from app.models.validation import HealthStatus
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
+logger.setLevel(logging.DEBUG)
 
 class HealthMonitorService:
     """健康监控服务"""
