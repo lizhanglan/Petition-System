@@ -13,7 +13,7 @@ COPY package*.json ./
 
 RUN npm config set registry https://registry.npmmirror.com
 # 安装依赖
-RUN npm ci
+RUN npm install
 
 # 复制源代码
 COPY . .
