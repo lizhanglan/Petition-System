@@ -30,12 +30,16 @@ jobs:
             # --no-cache 强制重新构建，避免缓存问题
             docker-compose stop frontend
             docker-compose rm -f frontend
-            docker rmi petition-system-frontend
+            docker rmi petition-system-frontend || true
             docker-compose build --no-cache
             docker-compose up -d
             
-            # 4. 自动执行数据库同步（防止新功能缺少表结构）
+            # 4. 数据库维护
+            # 4.1 确保基础表结构存在（幂等操作）
             docker exec petition-backend python manual_create_tables.py
+            
+            # 4.2 执行数据库迁移，应用增量修改（Alembic）
+            docker exec petition-backend alembic upgrade head
             
             # 5. 清理无用的旧镜像，节省服务器空间
             docker image prune -f

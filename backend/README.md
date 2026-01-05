@@ -19,9 +19,37 @@ pip install -r requirements.txt
 
 确保根目录的 `.env` 文件配置正确。
 
-## 初始化数据库
+## 数据库管理
+    
+### 初始化数据库
+    
+使用脚本初始化表结构：
+```bash
+python manual_create_tables.py
+```
+    
+### 数据库迁移 (Alembic)
+    
+本项目使用 Alembic 进行数据库版本管理。
+    
+**常用命令：**
 
-系统启动时会自动创建数据库表。
+1. **执行迁移（更新到最新版本）：**
+   ```bash
+   alembic upgrade head
+   ```
+
+2. **创建新迁移脚本（模型变更后）：**
+   ```bash
+   alembic revision -m "描述变更内容"
+   ```
+   *生成后需在 `alembic/versions` 编辑脚本内容*
+    
+3. **回滚到上一个版本：**
+   ```bash
+   alembic downgrade -1
+   ```
+
 
 ## 运行
 

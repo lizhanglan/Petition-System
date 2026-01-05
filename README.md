@@ -21,7 +21,7 @@
 
 - **前端**: Vue 3 + TypeScript + Element Plus
 - **后端**: Python + FastAPI
-- **数据库**: PostgreSQL
+- **数据库**: PostgreSQL (使用 Alembic 迁移)
 - **缓存**: Redis
 - **存储**: MinIO
 - **AI**: DeepSeek API
