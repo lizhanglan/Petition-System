@@ -698,37 +698,9 @@ async def _generate_with_json_template(
     
     print(f"[Generate] Document created with ID: {document.id}, version 1 created")
     
-    # 生成预览URL（优先使用WPS服务，降级到华为云）
-    from app.core.minio_client import minio_client
-    from app.services.preview_service_selector import preview_service_selector
-    
-    # 使用 MinIO 中存储的原始文件作为预览（保留格式）
-    temp_filename = f"temp_preview/{current_user.id}/{document.id}.docx"
-    
-    # 直接从 MinIO 获取刚生成的文件（保留红头格式）
-    docx_bytes = await minio_client.download_file(document.content)
-    
-    # 上传到临时预览目录
-    await minio_client.upload_file(
-        temp_filename,
-        docx_bytes,
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
-    
-    # 获取预览URL（优先WPS，降级到华为云）
-    # 生成的文档默认可编辑
-    file_url = minio_client.get_file_url(temp_filename, expires=3600, inline=True)
-    preview_result = await preview_service_selector.get_preview_url(
-        file_url=file_url,
-        file_name=f"{document.title}.docx",
-        user_id=str(current_user.id),
-        permission="edit"  # 改为可编辑模式
-    )
-    
-    preview_url = preview_result.get("preview_url") if preview_result else None
-    service_type = preview_result.get("service_type", "unsupported") if preview_result else "unsupported"
-    
-    print(f"[Generate] Preview service: {service_type}, URL: {preview_url}")
+    # JSON 模板不生成 docx 文件，直接返回（前端使用文本预览）
+    preview_url = None
+    print(f"[Generate] JSON template - no docx preview generated")
     
     return DocumentResponse(
         id=document.id,
