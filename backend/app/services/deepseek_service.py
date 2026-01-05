@@ -350,6 +350,32 @@ class DeepSeekService:
             try:
                 import json
                 data = json.loads(result)
+                
+                # 验证和修正占位符格式
+                if "replacements" in data:
+                    corrected_replacements = {}
+                    for old_text, new_text in data["replacements"].items():
+                        # 检查占位符格式
+                        if not new_text.startswith("{{") or not new_text.endswith("}}"):
+                            print(f"[DeepSeek] WARNING: Invalid placeholder format from AI: {new_text}")
+                            # 尝试修正
+                            if new_text.startswith("{") and not new_text.startswith("{{"):
+                                new_text = "{" + new_text
+                            if new_text.endswith("}") and not new_text.endswith("}}"):
+                                new_text = new_text + "}"
+                            print(f"[DeepSeek] Corrected to: {new_text}")
+                        
+                        # 检查是否有三个大括号
+                        if "{{{" in new_text or "}}}" in new_text:
+                            print(f"[DeepSeek] ERROR: Triple braces detected: {new_text}")
+                            new_text = new_text.replace("{{{", "{{").replace("}}}", "}}")
+                            print(f"[DeepSeek] Corrected to: {new_text}")
+                        
+                        corrected_replacements[old_text] = new_text
+                    
+                    data["replacements"] = corrected_replacements
+                    print(f"[DeepSeek] Validated {len(corrected_replacements)} replacements")
+                
                 data["success"] = True
                 return data
             except json.JSONDecodeError as e:

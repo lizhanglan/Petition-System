@@ -131,34 +131,89 @@ class TemplateProcessorService:
     
     def _replace_in_paragraph(self, paragraph: Paragraph, replacements: Dict[str, str]):
         """
-        在段落中替换文本，保留原有格式
+        在段落中替换文本，尽可能保留格式
         
         注意：replacements 应该已按长度降序排列
-        使用 run 级别替换以保留字体、颜色等格式
         """
-        # 替换字典已按长度排序，逐个处理
         for old_text, new_text in replacements.items():
+            if old_text not in paragraph.text:
+                continue
+            
+            print(f"[TemplateProcessor] Replacing '{old_text}' with '{new_text}' in paragraph")
+            
+            # 验证新文本格式（确保是正确的 Jinja2 格式）
+            if not new_text.startswith("{{") or not new_text.endswith("}}"):
+                print(f"[TemplateProcessor] WARNING: Invalid placeholder format: {new_text}")
+                # 修正格式
+                if new_text.startswith("{") and not new_text.startswith("{{"):
+                    new_text = "{" + new_text
+                if new_text.endswith("}") and not new_text.endswith("}}"):
+                    new_text = new_text + "}"
+                print(f"[TemplateProcessor] Corrected to: {new_text}")
+            
+            # 尝试在单个 run 中替换（最佳情况）
+            replaced_in_run = False
+            for run in paragraph.runs:
+                if old_text in run.text:
+                    run.text = run.text.replace(old_text, new_text)
+                    replaced_in_run = True
+                    print(f"[TemplateProcessor] Replaced in single run successfully")
+            
+            # 如果在单个 run 中成功替换，继续下一个
+            if replaced_in_run:
+                continue
+            
+            # 跨 run 的情况：需要特殊处理以保留格式
             if old_text in paragraph.text:
-                # 遍历所有 runs
-                for run in paragraph.runs:
-                    if old_text in run.text:
-                        run.text = run.text.replace(old_text, new_text)
+                print(f"[TemplateProcessor] Cross-run replacement needed")
                 
-                # 如果 run 级别没有完全匹配，尝试完整段落替换
-                # 这可能会丢失部分格式，但保证替换成功
-                if old_text in paragraph.text:
-                    # 获取第一个 run 的格式
-                    if paragraph.runs:
-                        first_run = paragraph.runs[0]
-                        # 合并所有 run 的文本
-                        full_text = paragraph.text
-                        # 替换
-                        new_full_text = full_text.replace(old_text, new_text)
-                        # 清空所有 run
-                        for run in paragraph.runs[1:]:
-                            run.text = ""
-                        # 设置第一个 run 的文本
-                        first_run.text = new_full_text
+                # 保存所有 runs 的格式信息
+                runs_info = []
+                for run in paragraph.runs:
+                    runs_info.append({
+                        'font_name': run.font.name,
+                        'font_size': run.font.size,
+                        'font_bold': run.font.bold,
+                        'font_italic': run.font.italic,
+                        'font_underline': run.font.underline,
+                        'font_color': run.font.color.rgb if run.font.color and run.font.color.rgb else None,
+                    })
+                
+                # 获取完整文本并执行替换
+                full_text = paragraph.text
+                new_full_text = full_text.replace(old_text, new_text)
+                
+                # 验证替换后的文本中没有错误的占位符格式
+                if "{{{" in new_full_text or "}}}" in new_full_text:
+                    print(f"[TemplateProcessor] ERROR: Triple braces detected in: {new_full_text[:100]}")
+                    new_full_text = new_full_text.replace("{{{", "{{").replace("}}}", "}}")
+                    print(f"[TemplateProcessor] Corrected triple braces")
+                
+                # 清空所有 runs
+                for run in paragraph.runs:
+                    run.text = ""
+                
+                # 策略：将新文本完整地放在第一个 run 中，保留其格式
+                if paragraph.runs and runs_info:
+                    first_run = paragraph.runs[0]
+                    first_run.text = new_full_text
+                    
+                    # 恢复第一个 run 的格式
+                    first_format = runs_info[0]
+                    if first_format['font_name']:
+                        first_run.font.name = first_format['font_name']
+                    if first_format['font_size']:
+                        first_run.font.size = first_format['font_size']
+                    if first_format['font_bold'] is not None:
+                        first_run.font.bold = first_format['font_bold']
+                    if first_format['font_italic'] is not None:
+                        first_run.font.italic = first_format['font_italic']
+                    if first_format['font_underline'] is not None:
+                        first_run.font.underline = first_format['font_underline']
+                    if first_format['font_color']:
+                        first_run.font.color.rgb = first_format['font_color']
+                
+                print(f"[TemplateProcessor] Cross-run replacement completed, text now in single run")
     
     async def process_template(
         self, 

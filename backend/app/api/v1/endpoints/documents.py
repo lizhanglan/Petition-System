@@ -702,18 +702,13 @@ async def _generate_with_json_template(
     from app.core.minio_client import minio_client
     from app.services.preview_service_selector import preview_service_selector
     
-    # 先将文档内容保存为临时文件到MinIO
+    # 使用 MinIO 中存储的原始文件作为预览（保留格式）
     temp_filename = f"temp_preview/{current_user.id}/{document.id}.docx"
     
-    # 使用document_export_service生成DOCX文件
-    from app.services.document_export_service import document_export_service
-    docx_bytes = await document_export_service.export_to_docx(
-        content=final_content,
-        title=document.title,
-        options={"document_type": document.document_type}
-    )
+    # 直接从 MinIO 获取刚生成的文件（保留红头格式）
+    docx_bytes = await minio_client.download_file(document.content)
     
-    # 上传到MinIO
+    # 上传到临时预览目录
     await minio_client.upload_file(
         temp_filename,
         docx_bytes,
@@ -1301,13 +1296,23 @@ async def get_document_preview(
         # 生成DOCX文件
         from app.services.preview_service_selector import preview_service_selector
         
-        docx_bytes = await document_export_service.export_to_docx(
-            content=document.content,
-            title=document.title,
-            options={"document_type": document.document_type}
-        )
+        # 检查 content 是否为 MinIO 文件路径（Word 模板生成的文档）
+        docx_bytes = None
+        if document.content and document.content.startswith("generated/") and document.content.endswith(".docx"):
+            print(f"[Preview] Using stored file from MinIO: {document.content}")
+            # 直接从 MinIO 获取原始文件（保留格式，包括红头）
+            docx_bytes = await minio_client.download_file(document.content)
         
-        # 上传到MinIO
+        # 如果没有从 MinIO 获取到文件，使用传统方式生成
+        if not docx_bytes:
+            print(f"[Preview] Generating new DOCX from content")
+            docx_bytes = await document_export_service.export_to_docx(
+                content=document.content,
+                title=document.title,
+                options={"document_type": document.document_type}
+            )
+        
+        # 上传到MinIO临时预览目录
         temp_filename = f"temp_preview/{current_user.id}/{document.id}.docx"
         await minio_client.upload_file(
             temp_filename,

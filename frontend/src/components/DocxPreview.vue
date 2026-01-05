@@ -126,6 +126,9 @@ const loadDocument = async () => {
         renderEndnotes: true
       })
       
+      // 添加红头横线（docx-preview 不支持 VML 元素）
+      addHeaderLines(previewRef.value)
+      
       emit('loaded')
     }
   } catch (err: any) {
@@ -139,6 +142,121 @@ const loadDocument = async () => {
 
 const reload = () => {
   loadDocument()
+}
+
+// 添加红头横线（补偿 docx-preview 不支持 VML 的问题）
+const addHeaderLines = (container: HTMLElement) => {
+  try {
+    console.log('[DocxPreview] 开始添加红头横线')
+    
+    // 等待 DOM 完全渲染
+    setTimeout(() => {
+      // 尝试多种选择器找到文档容器
+      let docContainer = container.querySelector('.docx-wrapper') as HTMLElement
+      if (!docContainer) {
+        docContainer = container.querySelector('section') as HTMLElement
+      }
+      if (!docContainer) {
+        docContainer = container.querySelector('.docx-content') as HTMLElement
+      }
+      if (!docContainer) {
+        docContainer = container
+      }
+      
+      console.log('[DocxPreview] 文档容器:', docContainer.className || 'root')
+      
+      // 查找红头段落（第一个包含红色文字的段落）
+      const paragraphs = docContainer.querySelectorAll('p')
+      console.log('[DocxPreview] 找到段落数:', paragraphs.length)
+      
+      let headerParagraph: HTMLElement | null = null
+      
+      for (let i = 0; i < Math.min(5, paragraphs.length); i++) {
+        const para = paragraphs[i] as HTMLElement
+        const text = para.textContent || ''
+        console.log(`[DocxPreview] 段落 ${i + 1}:`, text.substring(0, 30))
+        
+        const spans = para.querySelectorAll('span')
+        
+        // 检查是否有红色文字
+        const hasRedText = Array.from(spans).some(span => {
+          const color = window.getComputedStyle(span).color
+          const isRed = color.includes('255, 0, 0') || color.includes('192, 0, 0')
+          if (isRed) {
+            console.log('[DocxPreview] 找到红色文字')
+          }
+          return isRed
+        })
+        
+        if (hasRedText || text.includes('学生工作部') || text.includes('工作处')) {
+          headerParagraph = para
+          console.log('[DocxPreview] 找到红头段落')
+          break
+        }
+      }
+      
+      // 创建红头横线容器
+      const lineContainer = document.createElement('div')
+      lineContainer.className = 'header-lines-overlay'
+      lineContainer.style.cssText = `
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        width: 100%;
+        pointer-events: none;
+        z-index: 1;
+      `
+      
+      // 计算横线位置
+      let line1Top = 80 // 默认位置
+      let line2Top = 1000 // 默认位置（页面底部）
+      
+      if (headerParagraph) {
+        try {
+          const containerRect = docContainer.getBoundingClientRect()
+          const paraRect = headerParagraph.getBoundingClientRect()
+          
+          // 第一条线在红头段落正下方
+          line1Top = paraRect.bottom - containerRect.top + 5
+          // 第二条线在页面底部（约 1000px，接近 A4 纸底部）
+          line2Top = 1000
+          
+          console.log('[DocxPreview] 横线位置:', { line1Top, line2Top })
+        } catch (err) {
+          console.warn('[DocxPreview] 计算位置失败，使用默认值:', err)
+        }
+      } else {
+        console.log('[DocxPreview] 未找到红头段落，使用默认位置')
+      }
+      
+      // 第一条横线（红头正下方）
+      const line1 = document.createElement('div')
+      line1.style.cssText = `
+        position: absolute;
+        left: 50px;
+        right: 50px;
+        top: ${line1Top}px;
+        height: 3px;
+        background: #ff0000;
+        box-shadow: 0 1px 2px rgba(255, 0, 0, 0.3);
+      `
+      
+      lineContainer.appendChild(line1)
+      // 不再添加第二条横线
+      
+      // 确保容器是相对定位
+      if (window.getComputedStyle(docContainer).position === 'static') {
+        docContainer.style.position = 'relative'
+      }
+      
+      docContainer.appendChild(lineContainer)
+      console.log('[DocxPreview] 红头横线已添加')
+    }, 300) // 延迟 300ms 确保 DOM 和样式完全渲染
+    
+  } catch (err) {
+    console.error('[DocxPreview] 添加红头横线失败:', err)
+  }
 }
 
 // 监听 props 变化
