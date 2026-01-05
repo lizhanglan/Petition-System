@@ -16,7 +16,7 @@ import os
 load_dotenv()
 
 # 导入所有模型（确保元数据被注册）
-from app.models.base import Base
+from app.core.database import Base
 from app.models.user import User
 from app.models.file import File
 from app.models.template import Template
